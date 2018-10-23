@@ -8,10 +8,12 @@ find_package(catkin REQUIRED COMPONENTS
   actionlib
   cmake_modules
   geometry_msgs
+  interactive_markers
   roscpp
   tf
   tf2_bullet
   tf2_geometry_msgs
+  visualization_msgs
 )
 
 #find_package(Eigen REQUIRED)
@@ -47,12 +49,19 @@ target_link_libraries(waypoint_planner
 #  ${EIGEN_INCLUDE_DIRS}
 )
 
+add_executable(waypoint_tester
+  src/WaypointTester.cpp src/RewardsAndCosts.cpp
+)
+target_link_libraries(waypoint_tester
+  ${catkin_LIBRARIES}
+)
+
 #############
 ## Install ##
 #############
 
 ## Mark executables and/or libraries for installation
-install(TARGETS waypoint_planner
+install(TARGETS waypoint_planner waypoint_tester
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

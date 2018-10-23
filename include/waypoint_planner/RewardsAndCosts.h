@@ -27,6 +27,9 @@ public:
   static double reward_recognition(geometry_msgs::PoseStamped h, geometry_msgs::Vector3 h_dims,
       geometry_msgs::PointStamped r);
 
+  static double reward_recognition(geometry_msgs::PoseStamped h, geometry_msgs::Vector3 h_dims,
+      geometry_msgs::PointStamped r, std::vector<int> &point_detections);
+
   static bool collision_check(btVector3 unit_vec, btVector3 origin, btVector3 half_dims, float dst);
 };
 
