@@ -22,7 +22,7 @@ geometry_msgs::PointStamped r)
   closest_point.setMin(half_dims);
   double dst = (r_h - closest_point).length();
 
-  return exp(-dst);
+  return exp(-10*dst);
 }
 
 double RewardsAndCosts::cost_intrusion(geometry_msgs::PoseStamped h, geometry_msgs::PointStamped r)
@@ -66,26 +66,38 @@ double RewardsAndCosts::reward_recognition(geometry_msgs::PoseStamped h, geometr
   // check a fixed set of points
   vector<btVector3> keypoints;
   keypoints.clear();
-  float v_x_increment = h_dims.x*0.45;
-  float v_y_increment = h_dims.y/2.0;
-  float v_z_increment = h_dims.z/4.0;
-  keypoints.push_back(btVector3(0, 2*v_y_increment + 0.01, v_z_increment));  // workspace center
-  for (int i = -1; i <= 1; i += 2)
+
+  // change these values to change the number of points checked
+  int x_disc = 5;
+  int y_disc = 4;
+  int z_disc = 10;
+
+  float min_x = -h_dims.x*0.45;
+  float max_x = -min_x;
+  float min_y = h_dims.y/2.0 + 0.01;
+  float max_y = min_y + h_dims.y;
+  float min_z = 0;
+  float max_z = min_z + h_dims.z/2.0;
+
+  float x_step = (max_x - min_x)/((float)(x_disc - 1));
+  float y_step = (max_y - min_y)/((float)(y_disc - 1));
+  float z_step = (max_z - min_z)/((float)(z_disc - 1));
+
+  for (int i = 0; i < x_disc; i ++)
   {
-    for (int j = -1; j <= 1; j += 2)
+    for (int j = 0; j < y_disc; j ++)
     {
-      for (int k = -1; k <= 1; k ++)
+      for (int k = 0; k < z_disc; k ++)
       {
-        keypoints.push_back(keypoints[0] + btVector3(i*v_x_increment, j*v_y_increment, k*v_z_increment));
+        keypoints.push_back(btVector3(min_x + i*x_step, min_y + j*y_step, min_z + k*z_step));
       }
     }
   }
 
   int visible_points = 0;
-  btVector3 r_vc = keypoints[0] - r_h;
+  btVector3 r_vc = btVector3(min_x + (max_x - min_x)/2.0, min_y + (max_y - min_y)/2.0, min_z + (max_z - min_z)/2.0) - r_h;
 
   for (unsigned int i = 0; i < keypoints.size(); i ++)
-//  for (unsigned int i = 0; i < 1; i ++)
   {
     btVector3 r_vi = keypoints[i] - r_h;
 

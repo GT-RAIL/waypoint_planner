@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   interactive_markers
   roscpp
+  roslib
   tf
   tf2_bullet
   tf2_geometry_msgs
@@ -55,6 +56,13 @@ add_executable(waypoint_tester
 target_link_libraries(waypoint_tester
   ${catkin_LIBRARIES}
 )
+
+add_executable(waypoint_setter
+  src/WaypointSetter.cpp
+  )
+target_link_libraries(waypoint_setter
+  ${catkin_LIBRARIES}
+  )
 
 #############
 ## Install ##

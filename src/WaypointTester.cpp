@@ -5,21 +5,22 @@ using namespace std;
 WaypointTester::WaypointTester() :
     pnh("~")
 {
-  // hardcoded grid of possible waypoints
+  // read in waypoints
+  string waypoint_filename;
+  pnh.param<string>("waypoint_file", waypoint_filename, "iss_waypoints.csv");
+  fstream waypoint_file((ros::package::getPath("waypoint_planner") + "/config/" + waypoint_filename).c_str());
+  string line;
   geometry_msgs::PointStamped point;
   point.header.frame_id = "world";
-  for (float i = -3; i <= 3; i += 1.5)
+  while (getline(waypoint_file, line))
   {
-    for (float j = -3; j <= 3; j += 1.5)
-    {
-      for (float k = -3; k <= 3; k += 1.5)
-      {
-        point.point.x = i;
-        point.point.y = j;
-        point.point.z = k;
-        waypoints.push_back(point);
-      }
-    }
+    unsigned long i = line.find(',');
+    point.point.x = atof(line.substr(0, i).c_str());
+    line = line.substr(i + 1);
+    i = line.find(',');
+    point.point.y = atof(line.substr(0, i).c_str());
+    point.point.z = atof(line.substr(i + 1).c_str());
+    waypoints.push_back(point);
   }
 
   current_waypoint = 0;
@@ -28,8 +29,8 @@ WaypointTester::WaypointTester() :
   human_pose.pose.orientation.w = 1.0;
 
   human_dims.x = 0.5;
-  human_dims.y = 0.3;
-  human_dims.z = 1.8;
+  human_dims.y = 0.4;
+  human_dims.z = 1.4;
 
   publish_tfs();
   ros::spinOnce();
@@ -174,13 +175,31 @@ void WaypointTester::initialize_markers()
   human_control.markers.push_back(human_marker);
 
   // keypoint markers
-  float v_x_increment = human_dims.x*0.45;
-  float v_y_increment = human_dims.y/2.0;
-  float v_z_increment = human_dims.z/4.0;
+//  float v_x_increment = human_dims.x*0.45;
+//  float v_y_increment = human_dims.y/2.0;
+//  float v_z_increment = human_dims.z/4.0;
+
+  // change these values to change the number of points checked
+  int x_disc = 5;
+  int y_disc = 4;
+  int z_disc = 10;
+
+  float min_x = -human_dims.x*0.45;
+  float max_x = -min_x;
+  float min_y = human_dims.y/2.0 + 0.01;
+  float max_y = min_y + 0.3;
+  float min_z = 0;
+  float max_z = min_z + human_dims.z/2.0;
+
+  float x_step = (max_x - min_x)/((float)(x_disc - 1));
+  float y_step = (max_y - min_y)/((float)(y_disc - 1));
+  float z_step = (max_z - min_z)/((float)(z_disc - 1));
+
   visualization_msgs::Marker keypoint_marker;
   keypoint_marker.header.frame_id = "human";
-  keypoint_marker.pose.position.y = 2*v_y_increment + 0.01;
-  keypoint_marker.pose.position.z = v_z_increment;
+  keypoint_marker.pose.position.x = min_x;
+  keypoint_marker.pose.position.y = min_y;
+  keypoint_marker.pose.position.z = min_z;
   keypoint_marker.pose.orientation.w = 1.0;
   keypoint_marker.action = visualization_msgs::Marker::ADD;
   keypoint_marker.ns = "keypoint";
@@ -195,22 +214,44 @@ void WaypointTester::initialize_markers()
   keypoint_marker.color.a = 1.0;
   human_control.markers.push_back(keypoint_marker);
   int id_counter = 0;
-  for (int i = -1; i <= 1; i += 2)
+
+  for (int i = 0; i < x_disc; i ++)
   {
-    for (int j = -1; j <= 1; j += 2)
+    for (int j = 0; j < y_disc; j ++)
     {
-      for (int k = -1; k <= 1; k ++)
+      for (int k = 0; k < z_disc; k ++)
       {
+        if (i == 0 && j == 0 && k == 0)
+          continue;
         id_counter ++;
         visualization_msgs::Marker key_marker = human_control.markers[1];
         key_marker.id = id_counter;
-        key_marker.pose.position.x += i*v_x_increment;
-        key_marker.pose.position.y += j*v_y_increment;
-        key_marker.pose.position.z += k*v_z_increment;
+        key_marker.pose.position.x += i*x_step;
+        key_marker.pose.position.y += j*y_step;
+        key_marker.pose.position.z += k*z_step;
         human_control.markers.push_back(key_marker);
       }
     }
   }
+
+  visualization_msgs::Marker midpoint_marker;
+  midpoint_marker.header.frame_id = "human";
+  midpoint_marker.pose.position.x = min_x + (max_x - min_x)/2.0;
+  midpoint_marker.pose.position.y = min_y + (max_y - min_y)/2.0;
+  midpoint_marker.pose.position.z = min_z + (max_z - min_z)/2.0;
+  midpoint_marker.pose.orientation.w = 1.0;
+  midpoint_marker.action = visualization_msgs::Marker::ADD;
+  midpoint_marker.ns = "keypoint";
+  midpoint_marker.id = 0;
+  midpoint_marker.type = visualization_msgs::Marker::SPHERE;
+  midpoint_marker.scale.x = 0.04;
+  midpoint_marker.scale.y = 0.04;
+  midpoint_marker.scale.z = 0.04;
+  midpoint_marker.color.r = 0.75;
+  midpoint_marker.color.g = 0.75;
+  midpoint_marker.color.b = 0.0;
+  midpoint_marker.color.a = 1.0;
+  human_control.markers.push_back(midpoint_marker);
 
   visualization_msgs::InteractiveMarker human_im;
   human_im.header.frame_id = "human";
@@ -219,7 +260,6 @@ void WaypointTester::initialize_markers()
   human_im.name = human_control.name;
 
   im_server->insert(human_im);
-  //im_server->setCallback(human_im.name, boost::bind(&WaypointTester::waypoint_clicked, this, _1));
 
   im_server->applyChanges();
 }
@@ -284,7 +324,7 @@ void WaypointTester::calculate_costs()
       waypoints[current_waypoint]));
   ROS_INFO("\tIntrusion cost: %f", RewardsAndCosts::cost_intrusion(human_pose, waypoints[current_waypoint]));
 
-  for (unsigned int i = 1; i < im.controls[0].markers.size(); i ++)
+  for (unsigned int i = 1; i < im.controls[0].markers.size() - 1; i ++)
   {
     if (point_detections[i-1] == 0)
     {

@@ -1,8 +1,12 @@
 #ifndef WAYPOINT_PLANNER_WAYPOINT_TESTER_H_
 #define WAYPOINT_PLANNER_WAYPOINT_TESTER_H_
 
+// CPP
+#include <fstream>
+
 // ROS
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Vector3.h>
