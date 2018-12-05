@@ -14,6 +14,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 
 #include "waypoint_planner/RewardsAndCosts.h"
+#include "waypoint_planner/EnvironmentSetup.h"
 
 class WaypointTester
 {

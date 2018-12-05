@@ -51,18 +51,35 @@ target_link_libraries(waypoint_planner
 )
 
 add_executable(waypoint_tester
-  src/WaypointTester.cpp src/RewardsAndCosts.cpp
+  src/WaypointTester.cpp src/RewardsAndCosts.cpp src/EnvironmentSetup.cpp src/HumanTrajectory.cpp
 )
 target_link_libraries(waypoint_tester
   ${catkin_LIBRARIES}
+  yaml-cpp
+)
+
+add_executable(human_simulator
+  src/HumanSimulator.cpp src/EnvironmentSetup.cpp src/HumanTrajectory.cpp
+)
+target_link_libraries(human_simulator
+  ${catkin_LIBRARIES}
+  yaml-cpp
 )
 
 add_executable(waypoint_setter
   src/WaypointSetter.cpp
-  )
+)
 target_link_libraries(waypoint_setter
   ${catkin_LIBRARIES}
-  )
+)
+
+add_executable(trajectory_setter
+  src/TrajectorySetter.cpp src/EnvironmentSetup.cpp src/HumanTrajectory.cpp
+)
+target_link_libraries(trajectory_setter
+  ${catkin_LIBRARIES}
+  yaml-cpp
+)
 
 #############
 ## Install ##

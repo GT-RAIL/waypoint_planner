@@ -8,20 +8,8 @@ WaypointTester::WaypointTester() :
   // read in waypoints
   string waypoint_filename;
   pnh.param<string>("waypoint_file", waypoint_filename, "iss_waypoints.csv");
-  fstream waypoint_file((ros::package::getPath("waypoint_planner") + "/config/" + waypoint_filename).c_str());
-  string line;
-  geometry_msgs::PointStamped point;
-  point.header.frame_id = "world";
-  while (getline(waypoint_file, line))
-  {
-    unsigned long i = line.find(',');
-    point.point.x = atof(line.substr(0, i).c_str());
-    line = line.substr(i + 1);
-    i = line.find(',');
-    point.point.y = atof(line.substr(0, i).c_str());
-    point.point.z = atof(line.substr(i + 1).c_str());
-    waypoints.push_back(point);
-  }
+  string waypoint_file_path = ros::package::getPath("waypoint_planner") + "/config/" + waypoint_filename;
+  EnvironmentSetup::readWaypoints(waypoint_file_path, waypoints);
 
   current_waypoint = 0;
 
@@ -155,18 +143,18 @@ void WaypointTester::initialize_markers()
   im_server->setCallback(pose_im.name, boost::bind(&WaypointTester::pose_updated, this, _1));
 
   // human marker
-  visualization_msgs::Marker human_marker;
-  human_marker.header.frame_id = "human";
-  human_marker.pose.orientation.w = 1.0;
-  human_marker.action = visualization_msgs::Marker::ADD;
-  human_marker.ns = "human_box";
-  human_marker.id = 0;
-  human_marker.type = visualization_msgs::Marker::CUBE;
-  human_marker.scale = human_dims;
-  human_marker.color.r = 1.0;
-  human_marker.color.g = 0.0;
-  human_marker.color.b = 0.0;
-  human_marker.color.a = 1.0;
+  visualization_msgs::Marker human_marker = EnvironmentSetup::initializeHumanMarker(human_dims);
+//  human_marker.header.frame_id = "human";
+//  human_marker.pose.orientation.w = 1.0;
+//  human_marker.action = visualization_msgs::Marker::ADD;
+//  human_marker.ns = "human_box";
+//  human_marker.id = 0;
+//  human_marker.type = visualization_msgs::Marker::CUBE;
+//  human_marker.scale = human_dims;
+//  human_marker.color.r = 1.0;
+//  human_marker.color.g = 0.0;
+//  human_marker.color.b = 0.0;
+//  human_marker.color.a = 1.0;
 
   visualization_msgs::InteractiveMarkerControl human_control;
   human_control.name = "human_control";
