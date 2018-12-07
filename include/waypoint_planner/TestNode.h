@@ -6,6 +6,7 @@
 
 #include "waypoint_planner/State.h"
 #include "waypoint_planner/Action.h"
+//#include "waypoint_planner/SMDPSolver.h"
 
 class TestNode
 {

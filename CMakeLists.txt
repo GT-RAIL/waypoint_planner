@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(waypoint_planner)
 
+add_compile_options(-std=c++11)
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -88,6 +90,19 @@ add_executable(test_node
 )
 target_link_libraries(test_node
   ${catkin_LIBRARIES}
+)
+
+add_executable(smdp_solver
+  src/SMDPSolver.cpp
+  src/State.cpp
+  src/Action.cpp
+  src/EnvironmentSetup.cpp
+  src/HumanTrajectory.cpp
+  src/RewardsAndCosts.cpp
+)
+target_link_libraries(smdp_solver
+  ${catkin_LIBRARIES}
+  yaml-cpp
 )
 
 #############

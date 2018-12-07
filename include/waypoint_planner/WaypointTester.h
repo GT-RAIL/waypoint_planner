@@ -34,7 +34,7 @@ private:
   std::vector<geometry_msgs::PointStamped> waypoints;
   int current_waypoint;
 
-    boost::shared_ptr<interactive_markers::InteractiveMarkerServer> im_server;
+  boost::shared_ptr<interactive_markers::InteractiveMarkerServer> im_server;
 
   void initialize_markers();
 
