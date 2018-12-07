@@ -81,6 +81,15 @@ target_link_libraries(trajectory_setter
   yaml-cpp
 )
 
+add_executable(test_node
+  src/TestNode.cpp
+  src/State.cpp
+  src/Action.cpp
+)
+target_link_libraries(test_node
+  ${catkin_LIBRARIES}
+)
+
 #############
 ## Install ##
 #############
