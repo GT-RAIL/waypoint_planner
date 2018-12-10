@@ -22,6 +22,9 @@ public:
 
     geometry_msgs::PointStamped actionGoal();
 
+    void duration(geometry_msgs::PointStamped s1, geometry_msgs::PointStamped s2, std::vector<double> &durations,
+        std::vector<double> &probabilities);
+
 private:
   uint8_t action_type;
   geometry_msgs::PointStamped action_goal;

@@ -96,6 +96,7 @@ double RewardsAndCosts::reward_recognition(geometry_msgs::PoseStamped h, geometr
 
   int visible_points = 0;
   btVector3 r_vc = btVector3(min_x + (max_x - min_x)/2.0, min_y + (max_y - min_y)/2.0, min_z + (max_z - min_z)/2.0) - r_h;
+  point_detections.resize(keypoints.size());
 
   for (unsigned int i = 0; i < keypoints.size(); i ++)
   {

@@ -25,6 +25,11 @@ public:
 
   void backwardsInduction();
 
+  double reward(State s, Action a);
+
+  void transition_model(geometry_msgs::PointStamped s, Action a, std::vector<geometry_msgs::PointStamped> s_primes,
+      std::vector<double> probabilities);
+
 private:
   std::vector<geometry_msgs::PointStamped> waypoints;
   std::vector<Action> actions;
