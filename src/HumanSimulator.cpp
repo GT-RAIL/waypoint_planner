@@ -17,6 +17,7 @@ HumanSimulator::HumanSimulator() :
   time = 0;
   human_marker = EnvironmentSetup::initializeHumanMarker();
   human_marker_publisher = pnh.advertise<visualization_msgs::Marker>("human_marker", 1, this);
+  time_server = pnh.advertiseService("change_time", &HumanSimulator::timeCallback, this);
 }
 
 void HumanSimulator::publishTFs()
@@ -40,6 +41,20 @@ void HumanSimulator::advanceTime(double timestep)
   time += timestep*speed_factor;
 }
 
+bool HumanSimulator::timeCallback(waypoint_planner::ChangeTime::Request &req, waypoint_planner::ChangeTime::Response &res)
+{
+  if (req.relative)
+  {
+    advanceTime(req.adjustment);
+  }
+  else
+  {
+    time = req.adjustment;
+  }
+
+  return true;
+}
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "human_simulator");
@@ -50,7 +65,7 @@ int main(int argc, char **argv)
   {
     ros::spinOnce();
     hs.publishTFs();
-    hs.advanceTime(0.0333333333333);
+//    hs.advanceTime(0.0333333333333);
     loop_rate.sleep();
   }
 

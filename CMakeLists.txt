@@ -25,6 +25,13 @@ find_package(catkin REQUIRED COMPONENTS
 ## Declare ROS messages, services and actions ##
 ################################################
 
+add_service_files(
+  FILES
+  ChangeTime.srv
+)
+
+generate_messages()
+
 ###################################################
 ## Declare things to be passed to other projects ##
 ###################################################
@@ -92,7 +99,8 @@ target_link_libraries(test_node
   ${catkin_LIBRARIES}
 )
 
-add_executable(smdp_solver
+add_executable(test_executor
+  src/TestExecutor.cpp
   src/SMDPSolver.cpp
   src/State.cpp
   src/Action.cpp
@@ -100,7 +108,7 @@ add_executable(smdp_solver
   src/HumanTrajectory.cpp
   src/RewardsAndCosts.cpp
 )
-target_link_libraries(smdp_solver
+target_link_libraries(test_executor
   ${catkin_LIBRARIES}
   yaml-cpp
 )

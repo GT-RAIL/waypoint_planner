@@ -25,10 +25,9 @@ public:
 
   void backwardsInduction();
 
-  double reward(State s, Action a);
+  Action get_action(geometry_msgs::PointStamped s, double t);
 
-  void transition_model(geometry_msgs::PointStamped s, Action a, std::vector<geometry_msgs::PointStamped> s_primes,
-      std::vector<double> probabilities);
+  Action get_action(geometry_msgs::PointStamped s, size_t t);
 
 private:
   std::vector<geometry_msgs::PointStamped> waypoints;
@@ -43,6 +42,13 @@ private:
   std::vector< std::vector<Action> > action_map;  // Indexed as [waypoint #][time_step #]
 
   geometry_msgs::Vector3 default_human_dims;
+
+  double reward(State s, Action a);
+
+  void transition_model(geometry_msgs::PointStamped s, Action a, std::vector<geometry_msgs::PointStamped> &s_primes,
+      std::vector<double> &probabilities);
+
+  size_t waypoint_to_index(geometry_msgs::PointStamped w);
 };
 
 #endif  // WAYPOINT_PLANNER_SMDP_SOLVER_H_
