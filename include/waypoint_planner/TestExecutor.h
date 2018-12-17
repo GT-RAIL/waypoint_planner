@@ -6,14 +6,12 @@
 #include <visualization_msgs/Marker.h>
 #include <waypoint_planner/ChangeTime.h>
 
-//#include "waypoint_planner/State.h"
-//#include "waypoint_planner/Action.h"
 #include "waypoint_planner/SMDPSolver.h"
 
 class TestExecutor
 {
 public:
-    TestExecutor(double horizon, double step);
+    TestExecutor(double horizon, double step, uint8_t mode, std::vector<double> waypoints = {});
 
     void run(double sim_step);
 
@@ -26,7 +24,7 @@ private:
 
   SMDPSolver solver;
 
-  geometry_msgs::PointStamped waypoint;
+  geometry_msgs::Point waypoint;
   double time_horizon;
   double time_step;
   double current_time;

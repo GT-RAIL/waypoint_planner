@@ -22,15 +22,15 @@ HumanSimulator::HumanSimulator() :
 
 void HumanSimulator::publishTFs()
 {
-  geometry_msgs::PoseStamped human_pose = trajectory.getPose(time);
+  geometry_msgs::Pose human_pose = trajectory.getPose(time);
 
   geometry_msgs::TransformStamped human_tf;
-  human_tf.header.frame_id = human_pose.header.frame_id;
+  human_tf.header.frame_id = "world";
   human_tf.child_frame_id = "human";
-  human_tf.transform.translation.x = human_pose.pose.position.x;
-  human_tf.transform.translation.y = human_pose.pose.position.y;
-  human_tf.transform.translation.z = human_pose.pose.position.z;
-  human_tf.transform.rotation = human_pose.pose.orientation;
+  human_tf.transform.translation.x = human_pose.position.x;
+  human_tf.transform.translation.y = human_pose.position.y;
+  human_tf.transform.translation.z = human_pose.position.z;
+  human_tf.transform.rotation = human_pose.orientation;
 
   tf_broadcaster.sendTransform(human_tf);
   human_marker_publisher.publish(human_marker);

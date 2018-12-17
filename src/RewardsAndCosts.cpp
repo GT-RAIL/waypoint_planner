@@ -4,13 +4,12 @@ using std::max;
 using std::min;
 using std::vector;
 
-double RewardsAndCosts::cost_collision(geometry_msgs::PoseStamped h, geometry_msgs::Vector3 h_dims,
-geometry_msgs::PointStamped r)
+double RewardsAndCosts::cost_collision(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims, geometry_msgs::Point r)
 {
   // convert ROS messages to bullet types
-  btTransform t_h(btQuaternion(h.pose.orientation.x, h.pose.orientation.y, h.pose.orientation.z, h.pose.orientation.w),
-                  btVector3(h.pose.position.x, h.pose.position.y, h.pose.position.z));
-  btVector3 r_point(r.point.x, r.point.y, r.point.z);
+  btTransform t_h(btQuaternion(h.orientation.x, h.orientation.y, h.orientation.z, h.orientation.w),
+                  btVector3(h.position.x, h.position.y, h.position.z));
+  btVector3 r_point(r.x, r.y, r.z);
   btVector3 half_dims(h_dims.x/2.0, h_dims.y/2.0, h_dims.z/2.0);
 
   // transform robot point into human coordinate frame
@@ -25,12 +24,12 @@ geometry_msgs::PointStamped r)
   return exp(-10*dst);
 }
 
-double RewardsAndCosts::cost_intrusion(geometry_msgs::PoseStamped h, geometry_msgs::PointStamped r)
+double RewardsAndCosts::cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r)
 {
   // convert ROS messages to bullet types
-  btTransform t_h(btQuaternion(h.pose.orientation.x, h.pose.orientation.y, h.pose.orientation.z, h.pose.orientation.w),
-                  btVector3(h.pose.position.x, h.pose.position.y, h.pose.position.z));
-  btVector3 r_point(r.point.x, r.point.y, r.point.z);
+  btTransform t_h(btQuaternion(h.orientation.x, h.orientation.y, h.orientation.z, h.orientation.w),
+                  btVector3(h.position.x, h.position.y, h.position.z));
+  btVector3 r_point(r.x, r.y, r.z);
   btVector3 h_point(0, 0, 0.75);
 
   // get head point in base frame
@@ -43,21 +42,20 @@ double RewardsAndCosts::cost_intrusion(geometry_msgs::PoseStamped h, geometry_ms
   return exp(-dst);
 }
 
-double RewardsAndCosts::reward_recognition(geometry_msgs::PoseStamped h, geometry_msgs::Vector3 h_dims,
-    geometry_msgs::PointStamped r)
+double RewardsAndCosts::reward_recognition(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims, geometry_msgs::Point r)
 {
   vector<int> temp;
 
   return reward_recognition(h, h_dims, r, temp);
 }
 
-double RewardsAndCosts::reward_recognition(geometry_msgs::PoseStamped h, geometry_msgs::Vector3 h_dims,
-    geometry_msgs::PointStamped r, std::vector<int> &point_detections)
+double RewardsAndCosts::reward_recognition(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims,
+    geometry_msgs::Point r, std::vector<int> &point_detections)
 {
   // convert ROS messages to bullet types
-  btTransform t_h(btQuaternion(h.pose.orientation.x, h.pose.orientation.y, h.pose.orientation.z, h.pose.orientation.w),
-                  btVector3(h.pose.position.x, h.pose.position.y, h.pose.position.z));
-  btVector3 r_point(r.point.x, r.point.y, r.point.z);
+  btTransform t_h(btQuaternion(h.orientation.x, h.orientation.y, h.orientation.z, h.orientation.w),
+                  btVector3(h.position.x, h.position.y, h.position.z));
+  btVector3 r_point(r.x, r.y, r.z);
   btVector3 half_dims(h_dims.x/2.0, h_dims.y/2.0, h_dims.z/2.0);
 
   // transform robot point into human coordinate frame

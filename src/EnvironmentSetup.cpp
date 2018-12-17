@@ -4,20 +4,19 @@ using std::fstream;
 using std::string;
 using std::vector;
 
-void EnvironmentSetup::readWaypoints(std::string file_path, std::vector<geometry_msgs::PointStamped> &waypoints)
+void EnvironmentSetup::readWaypoints(std::string file_path, std::vector<geometry_msgs::Point> &waypoints)
 {
   fstream waypoint_file(file_path.c_str());
   string line;
-  geometry_msgs::PointStamped point;
-  point.header.frame_id = "world";
+  geometry_msgs::Point point;
   while (getline(waypoint_file, line))
   {
     unsigned long i = line.find(',');
-    point.point.x = atof(line.substr(0, i).c_str());
+    point.x = atof(line.substr(0, i).c_str());
     line = line.substr(i + 1);
     i = line.find(',');
-    point.point.y = atof(line.substr(0, i).c_str());
-    point.point.z = atof(line.substr(i + 1).c_str());
+    point.y = atof(line.substr(0, i).c_str());
+    point.z = atof(line.substr(i + 1).c_str());
     waypoints.push_back(point);
   }
 }
@@ -25,20 +24,19 @@ void EnvironmentSetup::readWaypoints(std::string file_path, std::vector<geometry
 HumanTrajectory EnvironmentSetup::readHumanTrajectory(std::string file_path, bool interpolate, double step)
 {
   HumanTrajectory trajectory;
-  geometry_msgs::PoseStamped pose;
-  pose.header.frame_id = "world";
+  geometry_msgs::Pose pose;
   YAML::Node trajectoryNode = YAML::LoadFile(file_path);
   for (size_t i = 0; i < trajectoryNode.size(); i ++)
   {
     YAML::Node entry = trajectoryNode[i];
     double t = entry["time"].as<double>();
-    pose.pose.position.x = entry["pose"]["position"]["x"].as<double>();
-    pose.pose.position.y = entry["pose"]["position"]["y"].as<double>();
-    pose.pose.position.z = entry["pose"]["position"]["z"].as<double>();
-    pose.pose.orientation.w = entry["pose"]["orientation"]["w"].as<double>();
-    pose.pose.orientation.x = entry["pose"]["orientation"]["x"].as<double>();
-    pose.pose.orientation.y = entry["pose"]["orientation"]["y"].as<double>();
-    pose.pose.orientation.z = entry["pose"]["orientation"]["z"].as<double>();
+    pose.position.x = entry["pose"]["position"]["x"].as<double>();
+    pose.position.y = entry["pose"]["position"]["y"].as<double>();
+    pose.position.z = entry["pose"]["position"]["z"].as<double>();
+    pose.orientation.w = entry["pose"]["orientation"]["w"].as<double>();
+    pose.orientation.x = entry["pose"]["orientation"]["x"].as<double>();
+    pose.orientation.y = entry["pose"]["orientation"]["y"].as<double>();
+    pose.orientation.z = entry["pose"]["orientation"]["z"].as<double>();
 
     trajectory.addPose(t, pose);
   }

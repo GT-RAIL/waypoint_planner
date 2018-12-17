@@ -31,7 +31,7 @@ private:
 
   geometry_msgs::PoseStamped human_pose;
   geometry_msgs::Vector3 human_dims;
-  std::vector<geometry_msgs::PointStamped> waypoints;
+  std::vector<geometry_msgs::Point> waypoints;
   int current_waypoint;
 
   boost::shared_ptr<interactive_markers::InteractiveMarkerServer> im_server;

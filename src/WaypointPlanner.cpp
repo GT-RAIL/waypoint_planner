@@ -6,21 +6,19 @@ WaypointPlanner::WaypointPlanner() :
     pnh("~")
 {
 //  pnh.param("neighborhood_radius", neighborhoodRadius, 0.02);
-  geometry_msgs::PointStamped p;
-  p.header.frame_id = "base";
-  p.point.x = 2;
-  p.point.y = 3;
-  p.point.z = 1;
+  geometry_msgs::Point p;
+  p.x = 2;
+  p.y = 3;
+  p.z = 1;
 
-  geometry_msgs::PoseStamped pose;
-  pose.header.frame_id = "base";
-  pose.pose.position.x = 3;
-  pose.pose.position.y = -1;
-  pose.pose.position.z = 2;
-  pose.pose.orientation.x = 0;
-  pose.pose.orientation.y = 0;
-  pose.pose.orientation.z = -0.7071068;
-  pose.pose.orientation.w = 0.7071068;
+  geometry_msgs::Pose pose;
+  pose.position.x = 3;
+  pose.position.y = -1;
+  pose.position.z = 2;
+  pose.orientation.x = 0;
+  pose.orientation.y = 0;
+  pose.orientation.z = -0.7071068;
+  pose.orientation.w = 0.7071068;
 
   geometry_msgs::Vector3 dims;
   dims.x = 1;

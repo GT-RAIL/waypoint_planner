@@ -10,7 +10,7 @@ Action::Action(uint8_t action_type)
   this->action_type = action_type;
 }
 
-Action::Action(uint8_t action_type, geometry_msgs::PointStamped action_goal)
+Action::Action(uint8_t action_type, geometry_msgs::Point action_goal)
 {
   this->action_type = action_type;
   this->action_goal = action_goal;
@@ -21,7 +21,7 @@ void Action::setActionType(uint8_t action_type)
   this->action_type = action_type;
 }
 
-void Action::setGoal(geometry_msgs::PointStamped action_goal)
+void Action::setGoal(geometry_msgs::Point action_goal)
 {
   this->action_goal = action_goal;
 }
@@ -31,12 +31,12 @@ uint8_t Action::actionType()
   return action_type;
 }
 
-geometry_msgs::PointStamped Action::actionGoal()
+geometry_msgs::Point Action::actionGoal()
 {
   return action_goal;
 }
 
-void Action::duration(geometry_msgs::PointStamped s1, geometry_msgs::PointStamped s2, vector<double> &durations,
+void Action::duration(geometry_msgs::Point s1, geometry_msgs::Point s2, vector<double> &durations,
     vector<double> &probabilities)
 {
   if (action_type == OBSERVE)
@@ -48,8 +48,7 @@ void Action::duration(geometry_msgs::PointStamped s1, geometry_msgs::PointStampe
   {
     // planning + execution time calculation, assuming the robot moves at .5 m/s
     double base_planning_time = 3.0;
-    double base_travel_time = 2.0 * sqrt(pow(s1.point.x - s2.point.x, 2) + pow(s1.point.y - s2.point.y, 2) +
-                                         pow(s1.point.z - s2.point.z, 2));
+    double base_travel_time = 2.0 * sqrt(pow(s1.x - s2.x, 2) + pow(s1.y - s2.y, 2) + pow(s1.z - s2.z, 2));
     double discretization = 0.05;
     double scale_lower_bound = 1.0;
     double scale_upper_bound = 2.0;

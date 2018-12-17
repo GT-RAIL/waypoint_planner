@@ -2,8 +2,8 @@
 #define WAYPOINT_PLANNER_REWARDS_AND_COSTS_H_
 
 // ROS
-#include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/PointStamped.h>
+#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/Point.h>
 #include <tf2_bullet/tf2_bullet.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
@@ -19,16 +19,16 @@
 class RewardsAndCosts
 {
 public:
-  static double cost_collision(geometry_msgs::PoseStamped h, geometry_msgs::Vector3 h_dims,
-      geometry_msgs::PointStamped r);
+  static double cost_collision(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims,
+      geometry_msgs::Point r);
 
-  static double cost_intrusion(geometry_msgs::PoseStamped h, geometry_msgs::PointStamped r);
+  static double cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r);
 
-  static double reward_recognition(geometry_msgs::PoseStamped h, geometry_msgs::Vector3 h_dims,
-      geometry_msgs::PointStamped r);
+  static double reward_recognition(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims,
+      geometry_msgs::Point r);
 
-  static double reward_recognition(geometry_msgs::PoseStamped h, geometry_msgs::Vector3 h_dims,
-      geometry_msgs::PointStamped r, std::vector<int> &point_detections);
+  static double reward_recognition(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims,
+      geometry_msgs::Point r, std::vector<int> &point_detections);
 
   static bool collision_check(btVector3 unit_vec, btVector3 origin, btVector3 half_dims, float dst);
 };

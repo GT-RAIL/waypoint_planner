@@ -13,9 +13,12 @@
 class SMDPSolver
 {
 public:
-  SMDPSolver(double horizon, double step);
+  static const uint8_t REWARD_ONLY;
+  static const uint8_t LINEARIZED_COST;
 
-  SMDPSolver(double horizon, double step, std::string trajectory_file_name, std::string waypoint_file_name);
+  SMDPSolver(double horizon, double step, uint8_t mode);
+
+  SMDPSolver(double horizon, double step, uint8_t mode, std::string trajectory_file_name, std::string waypoint_file_name, std::vector<double> weights = {});
 
   void loadTrajectory(std::string file_name);
 
@@ -25,12 +28,15 @@ public:
 
   void backwardsInduction();
 
-  Action get_action(geometry_msgs::PointStamped s, double t);
+  Action getAction(geometry_msgs::Point s, double t);
 
-  Action get_action(geometry_msgs::PointStamped s, size_t t);
+  Action getAction(geometry_msgs::Point s, size_t t);
 
 private:
-  std::vector<geometry_msgs::PointStamped> waypoints;
+  uint8_t mode;
+  std::vector<double> linearization_weights;
+
+  std::vector<geometry_msgs::Point> waypoints;
   std::vector<Action> actions;
 
   HumanTrajectory trajectory;
@@ -45,10 +51,12 @@ private:
 
   double reward(State s, Action a);
 
-  void transition_model(geometry_msgs::PointStamped s, Action a, std::vector<geometry_msgs::PointStamped> &s_primes,
+  void transitionModel(geometry_msgs::Point s, Action a, std::vector<geometry_msgs::Point> &s_primes,
       std::vector<double> &probabilities);
 
-  size_t waypoint_to_index(geometry_msgs::PointStamped w);
+  size_t waypointToIndex(geometry_msgs::Point w);
+
+  double linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vector3 human_dims, geometry_msgs::Point r);
 };
 
 #endif  // WAYPOINT_PLANNER_SMDP_SOLVER_H_

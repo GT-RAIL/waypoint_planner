@@ -2,8 +2,8 @@
 
 using std::vector;
 
-TestExecutor::TestExecutor(double horizon, double step) :
-    solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),
+TestExecutor::TestExecutor(double horizon, double step, uint8_t mode, vector<double> waypoints) :
+    solver(horizon, step, mode, "iss_trajectory.yaml", "iss_waypoints.csv", waypoints),
     current_action(Action::OBSERVE),
     pnh("~")
 {
@@ -16,17 +16,16 @@ TestExecutor::TestExecutor(double horizon, double step) :
   time_step = step;
 
   // TODO: better waypoint initialization
-  waypoint.header.frame_id = "world";
-  waypoint.point.x = 11.39;
-  waypoint.point.y = -10.12;
-  waypoint.point.z = 4.45;
+  waypoint.x = 11.39;
+  waypoint.y = -10.12;
+  waypoint.z = 4.45;
 
   robot_vis_publisher = pnh.advertise<visualization_msgs::Marker>("test_robot_vis", 1, this);
 
   human_sim_time_client = n.serviceClient<waypoint_planner::ChangeTime>("human_simulator/change_time");
 
   robot_marker.header.frame_id = "world";
-  robot_marker.pose.position = waypoint.point;
+  robot_marker.pose.position = waypoint;
   robot_marker.pose.orientation.w = 1.0;
   robot_marker.action = visualization_msgs::Marker::ADD;
   robot_marker.ns = "test_robot";
@@ -49,12 +48,12 @@ void TestExecutor::run(double sim_step)
     {
       ROS_INFO("Move action complete.");
       waypoint = current_action.actionGoal();
-      robot_marker.pose.position = waypoint.point;
+      robot_marker.pose.position = waypoint;
       robot_marker.color.a = 1.0;
     }
 
-    current_action = solver.get_action(waypoint, current_time);
-    geometry_msgs::PointStamped goal;
+    current_action = solver.getAction(waypoint, current_time);
+    geometry_msgs::Point goal;
     if (current_action.actionType() == Action::MOVE)
     {
       ROS_INFO("Starting move action.");
@@ -100,7 +99,8 @@ void TestExecutor::run(double sim_step)
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
-  TestExecutor te(155, 1.0);
+  vector<double> weights{0.333333, 0.333333, 0.333333};
+  TestExecutor te(155, 1.0, SMDPSolver::LINEARIZED_COST, weights);
 
   ros::Rate loop_rate(30);
   while (ros::ok())

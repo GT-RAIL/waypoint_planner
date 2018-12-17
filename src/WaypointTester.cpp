@@ -37,8 +37,8 @@ void WaypointTester::initialize_markers()
   for (unsigned int i = 0; i < waypoints.size(); i ++)
   {
     visualization_msgs::Marker marker;
-    marker.header.frame_id = waypoints[i].header.frame_id;
-    marker.pose.position = waypoints[i].point;
+    marker.header.frame_id = "world";
+    marker.pose.position = waypoints[i];
     marker.pose.orientation.w = 1.0;
     marker.action = visualization_msgs::Marker::ADD;
     marker.ns = "waypoint";
@@ -72,7 +72,7 @@ void WaypointTester::initialize_markers()
     control.markers.push_back(marker);
 
     visualization_msgs::InteractiveMarker im;
-    im.header.frame_id = waypoints[i].header.frame_id;
+    im.header.frame_id = "world";
     im.pose.orientation.w = 1.0;
     im.controls.push_back(control);
     im.name = control.name;
@@ -306,11 +306,11 @@ void WaypointTester::calculate_costs()
   point_detections.resize(im.controls[0].markers.size() - 1);
 
   ROS_INFO("Updated costs:");
-  ROS_INFO("\tRecognition reward: %f", RewardsAndCosts::reward_recognition(human_pose, human_dims,
+  ROS_INFO("\tRecognition reward: %f", RewardsAndCosts::reward_recognition(human_pose.pose, human_dims,
       waypoints[current_waypoint], point_detections));
-  ROS_INFO("\tCollision cost: %f", RewardsAndCosts::cost_collision(human_pose, human_dims,
+  ROS_INFO("\tCollision cost: %f", RewardsAndCosts::cost_collision(human_pose.pose, human_dims,
       waypoints[current_waypoint]));
-  ROS_INFO("\tIntrusion cost: %f", RewardsAndCosts::cost_intrusion(human_pose, waypoints[current_waypoint]));
+  ROS_INFO("\tIntrusion cost: %f", RewardsAndCosts::cost_intrusion(human_pose.pose, waypoints[current_waypoint]));
 
   for (unsigned int i = 1; i < im.controls[0].markers.size() - 1; i ++)
   {
@@ -351,11 +351,11 @@ void WaypointTester::publish_tfs()
   human_tf.transform.translation.z = human_pose.pose.position.z;
   human_tf.transform.rotation = human_pose.pose.orientation;
 
-  robot_tf.header.frame_id = waypoints[current_waypoint].header.frame_id;
+  robot_tf.header.frame_id = "world";
   robot_tf.child_frame_id = "robot";
-  robot_tf.transform.translation.x = waypoints[current_waypoint].point.x;
-  robot_tf.transform.translation.y = waypoints[current_waypoint].point.y;
-  robot_tf.transform.translation.z = waypoints[current_waypoint].point.z;
+  robot_tf.transform.translation.x = waypoints[current_waypoint].x;
+  robot_tf.transform.translation.y = waypoints[current_waypoint].y;
+  robot_tf.transform.translation.z = waypoints[current_waypoint].z;
   robot_tf.transform.rotation.w = 1.0;
 
   tf_broadcaster.sendTransform(human_tf);

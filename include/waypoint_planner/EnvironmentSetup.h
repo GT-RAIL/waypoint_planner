@@ -4,7 +4,7 @@
 #include <fstream>
 #include <stdlib.h>
 
-#include <geometry_msgs/PointStamped.h>
+#include <geometry_msgs/Point.h>
 #include <geometry_msgs/Vector3.h>
 #include <visualization_msgs/Marker.h>
 
@@ -15,7 +15,7 @@
 class EnvironmentSetup
 {
 public:
-  static void readWaypoints(std::string file_path, std::vector<geometry_msgs::PointStamped> &waypoints);
+  static void readWaypoints(std::string file_path, std::vector<geometry_msgs::Point> &waypoints);
 
   static HumanTrajectory readHumanTrajectory(std::string file_path, bool interpolate=true, double step=0.033333);
 
