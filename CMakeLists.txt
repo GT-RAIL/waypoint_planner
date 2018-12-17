@@ -19,6 +19,14 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
 )
 
+find_library(lpsolve_LIBRARIES NAMES liblpsolve55.so lpsolve55 PATH_SUFFIXES lp_solve)
+
+message(${lpsolve_LIBRARIES})
+
+if(NOT lpsolve_LIBRARIES)
+  message(FATAL_ERROR "Cannot find lpsolve library")
+endif()
+
 #find_package(Eigen REQUIRED)
 
 ################################################
@@ -74,6 +82,10 @@ target_link_libraries(human_simulator
   ${catkin_LIBRARIES}
   yaml-cpp
 )
+add_dependencies(
+  human_simulator
+  ${PROJECT_NAME}_generate_messages_cpp
+)
 
 add_executable(waypoint_setter
   src/WaypointSetter.cpp
@@ -101,6 +113,7 @@ target_link_libraries(test_node
 
 add_executable(test_executor
   src/TestExecutor.cpp
+  src/LPSolver.cpp
   src/SMDPSolver.cpp
   src/State.cpp
   src/Action.cpp
@@ -108,8 +121,13 @@ add_executable(test_executor
   src/HumanTrajectory.cpp
   src/RewardsAndCosts.cpp
 )
+add_dependencies(
+  test_executor
+  ${PROJECT_NAME}_generate_messages_cpp
+)
 target_link_libraries(test_executor
   ${catkin_LIBRARIES}
+  ${lpsolve_LIBRARIES}
   yaml-cpp
 )
 

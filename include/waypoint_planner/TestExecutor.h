@@ -6,6 +6,7 @@
 #include <visualization_msgs/Marker.h>
 #include <waypoint_planner/ChangeTime.h>
 
+#include "waypoint_planner/LPSolver.h"
 #include "waypoint_planner/SMDPSolver.h"
 
 class TestExecutor
