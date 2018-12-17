@@ -4,9 +4,6 @@ using std::pair;
 using std::string;
 using std::vector;
 
-const uint8_t SMDPSolver::REWARD_ONLY = 0;
-const uint8_t SMDPSolver::LINEARIZED_COST = 1;
-
 SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode)
 {
   this->mode = mode;
@@ -14,7 +11,7 @@ SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode)
   time_step = step;
 
   // default weights
-  if (this->mode == LINEARIZED_COST)
+  if (this->mode == SMDPFunctions::LINEARIZED_COST)
   {
     for (size_t i = 0; i < 3; i ++)
     {
@@ -39,7 +36,7 @@ SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string traject
   initializeActions();
 
   // default weights
-  if (linearization_weights.size() == 0 && this->mode == LINEARIZED_COST)
+  if (linearization_weights.size() == 0 && this->mode == SMDPFunctions::LINEARIZED_COST)
   {
     for (size_t i = 0; i < 3; i ++)
     {
@@ -93,14 +90,28 @@ void SMDPSolver::backwardsInduction()
   // initialize final time step utilities
   for (size_t i = 0; i < waypoints.size(); i ++)
   {
-    if (mode == REWARD_ONLY)
+    if (mode == SMDPFunctions::REWARD)
     {
       utility_map[i][t_end] = RewardsAndCosts::reward_recognition(trajectory.getPose(t_end * time_step),
                                                                   default_human_dims, waypoints[i]);
     }
+    else if (mode == SMDPFunctions::COLLISION)
+    {
+      utility_map[i][t_end] = RewardsAndCosts::cost_collision(trajectory.getPose(t_end * time_step),
+                                                                  default_human_dims, waypoints[i]);
+    }
+    else if (mode == SMDPFunctions::INTRUSION)
+    {
+      utility_map[i][t_end] = RewardsAndCosts::cost_intrusion(trajectory.getPose(t_end * time_step), waypoints[i]);
+    }
+    else if (mode == SMDPFunctions::POWER)
+    {
+      utility_map[i][t_end] = 0;
+    }
     else
     {
-      utility_map[i][t_end] = linearizedCost(trajectory.getPose(t_end * time_step), default_human_dims, waypoints[i]);
+      utility_map[i][t_end] = SMDPFunctions::linearizedCost(trajectory.getPose(t_end * time_step), default_human_dims,
+          waypoints[i], linearization_weights);
     }
   }
 
@@ -120,10 +131,10 @@ void SMDPSolver::backwardsInduction()
             && a.actionGoal().z == s.robotPose().z)
           continue;
 
-        double u = reward(s, a);
+        double u = SMDPFunctions::reward(s, a, mode, linearization_weights);
         vector<geometry_msgs::Point> s_primes;
         vector<double> transition_probabilities;
-        transitionModel(s.robotPose(), a, s_primes, transition_probabilities);
+        SMDPFunctions::transitionModel(s.robotPose(), a, s_primes, transition_probabilities);
         for (size_t j = 0; j < s_primes.size(); j ++)
         {
           double u2 = 0;
@@ -164,76 +175,76 @@ void SMDPSolver::backwardsInduction()
   std::cout << "Backwards induction complete." << std::endl;
 }
 
-double SMDPSolver::reward(State s, Action a)
-{
-  vector<geometry_msgs::Point> s_primes;
-  vector<double> transition_probabilities;
-  transitionModel(s.robotPose(), a, s_primes, transition_probabilities);
-
-  double r = 0;
-
-  for (size_t i = 0; i < s_primes.size(); i ++)
-  {
-    vector<double> durations;
-    vector<double> probabilities;
-
-    a.duration(s.robotPose(), s_primes[i], durations, probabilities);
-
-    double r2 = 0;
-    for (size_t j = 0; j < durations.size(); j++)
-    {
-      if (a.actionType() == Action::OBSERVE)
-      {
-        if (mode == REWARD_ONLY)
-        {
-          r2 += probabilities[j] * RewardsAndCosts::reward_recognition(s.humanPose(), default_human_dims, s.robotPose())
-                * durations[j];
-        }
-        else
-        {
-          r2 += probabilities[j] * linearizedCost(s.humanPose(), default_human_dims, s.robotPose()) * durations[j];
-        }
-      }
-      else
-      {
-        r2 += probabilities[j] * 0 * durations[j];  //TODO: reward/cost while in transit (currently set to 0)
-      }
-    }
-
-    r += transition_probabilities[i]*r2;
-  }
-
-  return r;
-}
-
-double SMDPSolver::linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vector3 human_dims,
-    geometry_msgs::Point r)
-{
-  return linearization_weights[0]*RewardsAndCosts::reward_recognition(h, human_dims, r)
-       - linearization_weights[1]*RewardsAndCosts::cost_collision(h, human_dims, r)
-       - linearization_weights[2]*RewardsAndCosts::cost_intrusion(h, r);
-}
-
-void SMDPSolver::transitionModel(geometry_msgs::Point s, Action a, vector<geometry_msgs::Point> &s_primes,
-    vector<double> &probabilities)
-{
-  geometry_msgs::Point s_prime;
-  if (a.actionType() == Action::OBSERVE)
-  {
-    s_prime.x = s.x;
-    s_prime.y = s.y;
-    s_prime.z = s.z;
-  }
-  else
-  {
-    s_prime.x = a.actionGoal().x;
-    s_prime.y = a.actionGoal().y;
-    s_prime.z = a.actionGoal().z;
-  }
-
-  s_primes.push_back(s_prime);
-  probabilities.push_back(1.0);
-}
+//double SMDPSolver::reward(State s, Action a)
+//{
+//  vector<geometry_msgs::Point> s_primes;
+//  vector<double> transition_probabilities;
+//  transitionModel(s.robotPose(), a, s_primes, transition_probabilities);
+//
+//  double r = 0;
+//
+//  for (size_t i = 0; i < s_primes.size(); i ++)
+//  {
+//    vector<double> durations;
+//    vector<double> probabilities;
+//
+//    a.duration(s.robotPose(), s_primes[i], durations, probabilities);
+//
+//    double r2 = 0;
+//    for (size_t j = 0; j < durations.size(); j++)
+//    {
+//      if (a.actionType() == Action::OBSERVE)
+//      {
+//        if (mode == REWARD_ONLY)
+//        {
+//          r2 += probabilities[j] * RewardsAndCosts::reward_recognition(s.humanPose(), default_human_dims, s.robotPose())
+//                * durations[j];
+//        }
+//        else
+//        {
+//          r2 += probabilities[j] * linearizedCost(s.humanPose(), default_human_dims, s.robotPose()) * durations[j];
+//        }
+//      }
+//      else
+//      {
+//        r2 += probabilities[j] * 0 * durations[j];  //TODO: reward/cost while in transit (currently set to 0)
+//      }
+//    }
+//
+//    r += transition_probabilities[i]*r2;
+//  }
+//
+//  return r;
+//}
+//
+//double SMDPSolver::linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vector3 human_dims,
+//    geometry_msgs::Point r)
+//{
+//  return linearization_weights[0]*RewardsAndCosts::reward_recognition(h, human_dims, r)
+//       - linearization_weights[1]*RewardsAndCosts::cost_collision(h, human_dims, r)
+//       - linearization_weights[2]*RewardsAndCosts::cost_intrusion(h, r);
+//}
+//
+//void SMDPSolver::transitionModel(geometry_msgs::Point s, Action a, vector<geometry_msgs::Point> &s_primes,
+//    vector<double> &probabilities)
+//{
+//  geometry_msgs::Point s_prime;
+//  if (a.actionType() == Action::OBSERVE)
+//  {
+//    s_prime.x = s.x;
+//    s_prime.y = s.y;
+//    s_prime.z = s.z;
+//  }
+//  else
+//  {
+//    s_prime.x = a.actionGoal().x;
+//    s_prime.y = a.actionGoal().y;
+//    s_prime.z = a.actionGoal().z;
+//  }
+//
+//  s_primes.push_back(s_prime);
+//  probabilities.push_back(1.0);
+//}
 
 Action SMDPSolver::getAction(geometry_msgs::Point s, double t)
 {

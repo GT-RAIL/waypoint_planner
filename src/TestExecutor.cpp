@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
   vector<double> weights{0.333333, 0.333333, 0.333333};
-  TestExecutor te(155, 1.0, SMDPSolver::LINEARIZED_COST, weights);
+  TestExecutor te(155, 1.0, SMDPFunctions::LINEARIZED_COST, weights);
 
   ros::Rate loop_rate(30);
   while (ros::ok())

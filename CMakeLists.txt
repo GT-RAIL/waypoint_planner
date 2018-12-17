@@ -120,6 +120,7 @@ add_executable(test_executor
   src/EnvironmentSetup.cpp
   src/HumanTrajectory.cpp
   src/RewardsAndCosts.cpp
+  src/SMDPFunctions.cpp
 )
 add_dependencies(
   test_executor
