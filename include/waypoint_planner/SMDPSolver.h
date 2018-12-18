@@ -22,8 +22,6 @@ public:
 
   void loadWaypoints(std::string file_name);
 
-  void initializeActions();
-
   void backwardsInduction();
 
   Action getAction(geometry_msgs::Point s, double t);

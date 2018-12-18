@@ -25,6 +25,8 @@ public:
 
   static double linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vector3 human_dims, geometry_msgs::Point r,
       std::vector<double> weights);
+
+  static void initializeActions(std::vector<geometry_msgs::Point> waypoints, std::vector<Action> &actions);
 };
 
 #endif  // WAYPOINT_PLANNER_SMDP_FUNCTIONS_H_

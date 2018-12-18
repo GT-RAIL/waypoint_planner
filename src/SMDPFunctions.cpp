@@ -95,3 +95,13 @@ double SMDPFunctions::linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vecto
          - weights[1]*RewardsAndCosts::cost_collision(h, human_dims, r)
          - weights[2]*RewardsAndCosts::cost_intrusion(h, r);
 }
+
+void SMDPFunctions::initializeActions(vector<geometry_msgs::Point> waypoints, vector<Action> &actions)
+{
+  actions.clear();
+  actions.emplace_back(Action(Action::OBSERVE));
+  for (auto& waypoint : waypoints)
+  {
+    actions.emplace_back(Action(Action::MOVE, waypoint));
+  }
+}

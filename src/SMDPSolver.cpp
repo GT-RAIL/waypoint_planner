@@ -33,7 +33,7 @@ SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string traject
   time_step = step;
   loadTrajectory(trajectory_file_name);
   loadWaypoints(waypoint_file_name);
-  initializeActions();
+  SMDPFunctions::initializeActions(waypoints, actions);
 
   // default weights
   if (linearization_weights.size() == 0 && this->mode == SMDPFunctions::LINEARIZED_COST)
@@ -60,16 +60,6 @@ void SMDPSolver::loadWaypoints(string file_name)
 {
   string waypoint_file_path = ros::package::getPath("waypoint_planner") + "/config/" + file_name;
   EnvironmentSetup::readWaypoints(waypoint_file_path, waypoints);
-}
-
-void SMDPSolver::initializeActions()
-{
-  actions.clear();
-  actions.push_back(Action(Action::OBSERVE));
-  for (auto& waypoint : waypoints)
-  {
-    actions.push_back(Action(Action::MOVE, waypoint));
-  }
 }
 
 void SMDPSolver::backwardsInduction()
