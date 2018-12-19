@@ -8,6 +8,12 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t mode, vector<dou
     pnh("~")
 {
   srand(time(NULL));
+
+  // TODO: this is a test to try the LP solver only...
+  LPSolver lp(horizon, step);
+  lp.constructModel({20, 75});
+  return;
+
   solver.backwardsInduction();
   ROS_INFO("Policy computed.");
   time_horizon = horizon;
@@ -101,6 +107,9 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "test_executor");
   vector<double> weights{0.333333, 0.333333, 0.333333};
   TestExecutor te(155, 1.0, SMDPFunctions::LINEARIZED_COST, weights);
+
+  //TODO: This is a temporary return to test the LP solver in isolation
+  return EXIT_SUCCESS;
 
   ros::Rate loop_rate(30);
   while (ros::ok())

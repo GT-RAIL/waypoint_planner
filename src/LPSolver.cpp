@@ -2,6 +2,8 @@
 
 using std::string;
 using std::vector;
+using std::cout;
+using std::endl;
 
 LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, string waypoint_file_name)
 {
@@ -28,11 +30,14 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   default_human_dims.z = 1.4;
 }
 
-void LPSolver::constructModel()
+void LPSolver::constructModel(vector<double> total_costs)
 {
+  cout << "Constructing LP model..." << endl;
+
   // construct lp with |S_t|*|A| variables
   int num_variables = states.size() * actions.size();
   lp = make_lp(0, num_variables);
+  cout << "Model created with " << num_variables << " variables." << endl;
 
   // define objective function
   REAL row[1 + num_variables];
@@ -45,9 +50,104 @@ void LPSolver::constructModel()
     }
   }
   set_obj_fn(lp, row);
+  cout << "Objective function added to model." << endl;
 
   // define the constraints row-by-row
 
+  // state occupancy constraints
+  cout << "Calculating state occupancy constraints for " << states.size() << " states..." << endl;
+  int updated = 0;
+  for (size_t i = 0; i < states.size(); i ++)
+  {
+    if (i < 5 || i % 100 == 0)
+      cout << "\t" << (static_cast<double>(i)/(states.size() - 1))*100 << "%, " << updated << " transition probabilities used..." << endl;
+
+    // constraint for each s'
+    REAL crow[1 + num_variables] = {0};
+
+    // left side (iterate over actions)
+    for (size_t j = 0; j < actions.size(); j ++)
+    {
+      crow[i*actions.size() + j + 1] = 1;
+    }
+
+    // right side (iterate over states and actions)
+    for (size_t j = 0; j < states.size(); j ++)
+    {
+      // for speedup: states with greater than or equal to time indices cannot transition to the current state
+      if (states[j].time_index >= states[i].time_index)
+      {
+        continue;
+      }
+
+      for (size_t k = 0; k < actions.size(); k ++)
+      {
+        vector<geometry_msgs::Point> s_primes;
+        vector<double> transition_ps;
+        SMDPFunctions::transitionModel(waypoints[states[j].waypoint_id], actions[k], s_primes, transition_ps);
+
+        // iterate through possible waypoint transitions to calculate T(s'|s,a) (without time)
+        for (size_t l = 0; l < s_primes.size(); l++)
+        {
+          if (states[i].waypoint_id != waypointToIndex(s_primes[l]))
+            continue;
+
+          size_t t_waypoint_id = waypointToIndex(s_primes[l]);
+          double t_waypoint_p = transition_ps[l];
+
+          vector<double> dts;
+          vector<double> dt_ps;
+          actions[k].duration(waypoints[states[j].waypoint_id], s_primes[j], dts, dt_ps);
+          // iterate through possible time durations to fully calculate T(s'|s,a) (with time)
+          for (size_t m = 0; m < dts.size(); m ++)
+          {
+            size_t t_time_id = states[j].time_index + static_cast<size_t>(ceil(dts[m]/time_step));
+            if (states[i].time_index != t_time_id)
+              continue;
+
+            double t_prob = t_waypoint_p*dt_ps[m];
+            if (t_time_id <= t_end && t_prob > 0)
+            {
+              crow[j*actions.size() + k + 1] -= t_prob;
+              updated ++;
+            }
+          }
+        }
+      }
+    }
+
+    // define constant based on initial condition and add constraint
+    // TODO: for now, try only first waypoint as initial state... maybe try all t=0 as initial states in the future
+    double b = 0;
+    if (i == 0)
+    {
+      b = 1;
+    }
+    add_constraint(lp, crow, EQ, b);
+  }
+  cout << "State occupancy constraints added." << endl;
+
+  // total cost constraints
+  costConstraint(SMDPFunctions::COLLISION, total_costs[0]);
+  cout << "Collision constraint added." << endl;
+  costConstraint(SMDPFunctions::INTRUSION, total_costs[1]);
+  cout << "Intrusion constraint added." << endl;
+
+  // note: all variables must be >= 0 by default, so this constraint doesn't have to be added
+  cout << "LP model constructed successfully!" << endl;
+}
+
+void LPSolver::costConstraint(uint8_t mode, double threshold)
+{
+  REAL crow[1 + states.size() * actions.size()] = {0};
+  for (size_t i = 0; i < states.size(); i ++)
+  {
+    for (size_t j = 0; j < actions.size(); j ++)
+    {
+      crow[i*actions.size() + j + 1] = reward(i, j, mode);
+    }
+  }
+  add_constraint(lp, crow, LE, threshold);
 }
 
 void LPSolver::loadTrajectory(std::string file_name)

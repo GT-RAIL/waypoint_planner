@@ -38,7 +38,7 @@ public:
 
   void loadWaypoints(std::string file_name);
 
-  void constructModel();
+  void constructModel(std::vector<double> total_costs);
 
   Action getAction(geometry_msgs::Point s, double t);
 
@@ -65,6 +65,8 @@ private:
   size_t waypointToIndex(geometry_msgs::Point w);
 
   double reward(size_t state_id, size_t action_id, uint8_t mode);
+
+  void costConstraint(uint8_t mode, double threshold);
 };
 
 #endif  // WAYPOINT_PLANNER_LP_SOLVER_H_
