@@ -53,6 +53,7 @@ void LPSolver::constructModel(vector<double> total_costs)
   cout << "Objective function added to model." << endl;
 
   // define the constraints row-by-row
+  set_add_rowmode(lp, TRUE);
 
   // state occupancy constraints
   cout << "Calculating state occupancy constraints for " << states.size() << " states..." << endl;
@@ -133,8 +134,53 @@ void LPSolver::constructModel(vector<double> total_costs)
   costConstraint(SMDPFunctions::INTRUSION, total_costs[1]);
   cout << "Intrusion constraint added." << endl;
 
+  set_add_rowmode(lp, FALSE);
+
+  // maximize objective function
+  set_maxim(lp);
+
   // note: all variables must be >= 0 by default, so this constraint doesn't have to be added
   cout << "LP model constructed successfully!" << endl;
+
+//  free(row);
+}
+
+void LPSolver::solveModel()
+{
+  REAL vars[states.size()*actions.size()];
+
+  cout << "Simplifying model for linearly dependent rows..." << endl;
+  set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_LINDEP, get_presolveloops(lp));
+  cout << "Simplification complete." << endl;
+
+  cout << "Attempting to solve model..." << endl;
+  int success = solve(lp);
+  cout << "Model solved; solver returned code: " << success << endl;
+
+  cout << "Retrieving results..." << endl;
+  get_variables(lp, vars);
+  cout << "Copying results to this object for future use..." << endl;
+  for (int i = 0; i < states.size() * actions.size(); i ++)
+  {
+    ys.push_back(vars[i]);
+  }
+  cout << "Writing results to file in current directory..." << endl;
+  std::ofstream var_file("var_results.txt");
+  if (var_file.is_open())
+  {
+    for (int i = 0; i < states.size() * actions.size(); i++)
+    {
+      var_file << vars[i] << endl;
+    }
+  }
+  else
+  {
+    cout << "Could not open file.  Freeing up memory and returning." << endl;
+    return;
+  }
+
+  cout << "Results written.  Freeing up memory and returning." << endl;
+  free(lp);
 }
 
 void LPSolver::costConstraint(uint8_t mode, double threshold)
@@ -148,6 +194,8 @@ void LPSolver::costConstraint(uint8_t mode, double threshold)
     }
   }
   add_constraint(lp, crow, LE, threshold);
+
+//  free(crow);
 }
 
 void LPSolver::loadTrajectory(std::string file_name)

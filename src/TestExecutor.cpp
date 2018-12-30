@@ -10,8 +10,12 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t mode, vector<dou
   srand(time(NULL));
 
   // TODO: this is a test to try the LP solver only...
+  ROS_INFO("*********************** Start Point ***********************");
   LPSolver lp(horizon, step);
   lp.constructModel({20, 75});
+  ROS_INFO("*********************** Solve Point ***********************");
+  lp.solveModel();
+  ROS_INFO("************************ End Point *************************");
   return;
 
   solver.backwardsInduction();

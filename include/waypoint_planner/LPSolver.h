@@ -1,6 +1,8 @@
 #ifndef WAYPOINT_PLANNER_LP_SOLVER_H_
 #define WAYPOINT_PLANNER_LP_SOLVER_H_
 
+#include <iostream>
+
 #include <geometry_msgs/Vector3.h>
 #include <ros/package.h>
 
@@ -40,6 +42,8 @@ public:
 
   void constructModel(std::vector<double> total_costs);
 
+  void solveModel();
+
   Action getAction(geometry_msgs::Point s, double t);
 
   Action getAction(geometry_msgs::Point s, size_t t);
@@ -48,6 +52,7 @@ private:
   std::vector<geometry_msgs::Point> waypoints;
   std::vector<StateWithTime> states;
   std::vector<Action> actions;
+  std::vector<double> ys;
 
   HumanTrajectory trajectory;
 
