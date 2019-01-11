@@ -32,6 +32,12 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
 
 void LPSolver::constructModel(vector<double> total_costs)
 {
+  this->total_costs.clear();
+  for (unsigned int i = 0; i < total_costs.size(); i ++)
+  {
+    this->total_costs.push_back(total_costs[i]);
+  }
+
   cout << "Constructing LP model..." << endl;
 
   // construct lp with |S_t|*|A| variables
@@ -129,9 +135,9 @@ void LPSolver::constructModel(vector<double> total_costs)
   cout << "State occupancy constraints added." << endl;
 
   // total cost constraints
-  costConstraint(SMDPFunctions::COLLISION, total_costs[0]);
+  costConstraint(SMDPFunctions::COLLISION, this->total_costs[0]);
   cout << "Collision constraint added." << endl;
-  costConstraint(SMDPFunctions::INTRUSION, total_costs[1]);
+  costConstraint(SMDPFunctions::INTRUSION, this->total_costs[1]);
   cout << "Intrusion constraint added." << endl;
 
   set_add_rowmode(lp, FALSE);
@@ -145,27 +151,56 @@ void LPSolver::constructModel(vector<double> total_costs)
 //  free(row);
 }
 
-void LPSolver::solveModel()
+void LPSolver::solveModel(double timeout)
 {
-  REAL vars[states.size()*actions.size()];
+  int suboptimal_solutions = 0;
+  int total_attempts = 0;
 
-  cout << "Simplifying model for linearly dependent rows..." << endl;
-  set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_LINDEP, get_presolveloops(lp));
-  cout << "Simplification complete." << endl;
+  bool finished = false;
 
-  cout << "Attempting to solve model..." << endl;
-  int success = solve(lp);
-  cout << "Model solved; solver returned code: " << success << endl;
+  while (!finished)
+  {
+    set_timeout(lp, timeout);
+
+    total_attempts ++;
+
+    cout << "Simplifying model for linearly dependent rows..." << endl;
+    set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_LINDEP, get_presolveloops(lp));
+    cout << "Simplification complete." << endl;
+
+    cout << "Attempting to solve model..." << endl;
+    int success = solve(lp);
+
+    cout << "Model finished, with code: " << success << endl;
+    if (success == 1)
+      suboptimal_solutions ++;
+    cout << "Current progress: " << suboptimal_solutions << "/" << total_attempts << endl;
+    cout << endl;
+    if (success == 0)
+      break;
+
+    free(lp);
+
+    constructModel(this->total_costs);
+  }
+
+  cout << "Objective value: " << get_objective(lp) << endl;
+
+  REAL constr_results[get_Nrows(lp)];
+  get_constraints(lp, constr_results);
+  cout << "Constraint 1: " << constr_results[get_Nrows(lp) - 2] << endl;
+  cout << "Constraint 2: " << constr_results[get_Nrows(lp) - 1] << endl;
 
   cout << "Retrieving results..." << endl;
+  REAL vars[states.size() * actions.size()];
   get_variables(lp, vars);
   cout << "Copying results to this object for future use..." << endl;
-  for (int i = 0; i < states.size() * actions.size(); i ++)
+  for (int i = 0; i < states.size() * actions.size(); i++)
   {
     ys.push_back(vars[i]);
   }
   cout << "Writing results to file in current directory..." << endl;
-  std::ofstream var_file("var_results.txt");
+  std::ofstream var_file(ros::package::getPath("waypoint_planner") + "/config/var_results.txt");
   if (var_file.is_open())
   {
     for (int i = 0; i < states.size() * actions.size(); i++)
@@ -181,6 +216,21 @@ void LPSolver::solveModel()
 
   cout << "Results written.  Freeing up memory and returning." << endl;
   free(lp);
+}
+
+void LPSolver::loadModel(string file_name)
+{
+  ys.clear();
+  string model_file_path = ros::package::getPath("waypoint_planner") + "/config/" + file_name;
+  std::ifstream model_file(model_file_path);
+  string line;
+  if (model_file.is_open())
+  {
+    while (getline(model_file, line))
+    {
+      ys.push_back(atof(line.c_str()));
+    }
+  }
 }
 
 void LPSolver::costConstraint(uint8_t mode, double threshold)

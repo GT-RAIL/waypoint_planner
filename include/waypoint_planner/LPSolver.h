@@ -42,7 +42,9 @@ public:
 
   void constructModel(std::vector<double> total_costs);
 
-  void solveModel();
+  void solveModel(double timeout);
+
+  void loadModel(std::string file_name);
 
   Action getAction(geometry_msgs::Point s, double t);
 
@@ -53,6 +55,7 @@ private:
   std::vector<StateWithTime> states;
   std::vector<Action> actions;
   std::vector<double> ys;
+  std::vector<double> total_costs;
 
   HumanTrajectory trajectory;
 

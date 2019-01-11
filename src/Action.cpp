@@ -41,7 +41,7 @@ void Action::duration(geometry_msgs::Point s1, geometry_msgs::Point s2, vector<d
 {
   if (action_type == OBSERVE)
   {
-    durations.push_back(1.0);
+    durations.push_back(1.5);
     probabilities.push_back(1.0);
   }
   else
