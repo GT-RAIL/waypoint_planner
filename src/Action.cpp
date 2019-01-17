@@ -41,17 +41,17 @@ void Action::duration(geometry_msgs::Point s1, geometry_msgs::Point s2, vector<d
 {
   if (action_type == OBSERVE)
   {
-    durations.push_back(1.5);
+    durations.push_back(1.0);
     probabilities.push_back(1.0);
   }
   else
   {
-    // planning + execution time calculation, assuming the robot moves at .5 m/s
-    double base_planning_time = 3.0;
-    double base_travel_time = 2.0 * sqrt(pow(s1.x - s2.x, 2) + pow(s1.y - s2.y, 2) + pow(s1.z - s2.z, 2));
+    // planning + execution time calculation, assuming the robot moves at .75 m/s on average
+    double base_planning_time = 2.0;
+    double base_travel_time = sqrt(pow(s1.x - s2.x, 2) + pow(s1.y - s2.y, 2) + pow(s1.z - s2.z, 2)) / .75;
     double discretization = 0.05;
     double scale_lower_bound = 1.0;
-    double scale_upper_bound = 2.0;
+    double scale_upper_bound = 1.5;
     int steps = static_cast<int>((scale_upper_bound - scale_lower_bound)/discretization) + 1;
     double uniform_probability = 1.0/static_cast<double>(steps);
     for (int i = 0; i < steps; i ++)

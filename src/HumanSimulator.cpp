@@ -8,16 +8,16 @@ HumanSimulator::HumanSimulator() :
   // read in waypoints
   string trajectory_filename;
   pnh.param<string>("trajectory_file", trajectory_filename, "iss_trajectory.yaml");
+  std::cout << "Reading trajectory from " << trajectory_filename << std::endl;
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_filename;
   trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
 
   // setup time, human marker, and publisher
   pnh.param<double>("speed_factor", speed_factor, 1.0);
-  std::cout << speed_factor << std::endl;
   time = 0;
   human_marker = EnvironmentSetup::initializeHumanMarker();
   human_marker_publisher = pnh.advertise<visualization_msgs::Marker>("human_marker", 1, this);
-  time_server = pnh.advertiseService("change_time", &HumanSimulator::timeCallback, this);
+  time_update_subscriber = pnh.subscribe<std_msgs::Float32>("time_update", 0, &HumanSimulator::timeUpdateCallback, this);
 }
 
 void HumanSimulator::publishTFs()
@@ -41,18 +41,9 @@ void HumanSimulator::advanceTime(double timestep)
   time += timestep*speed_factor;
 }
 
-bool HumanSimulator::timeCallback(waypoint_planner::ChangeTime::Request &req, waypoint_planner::ChangeTime::Response &res)
+void HumanSimulator::timeUpdateCallback(const std_msgs::Float32::ConstPtr& msg)
 {
-  if (req.relative)
-  {
-    advanceTime(req.adjustment);
-  }
-  else
-  {
-    time = req.adjustment;
-  }
-
-  return true;
+  time = msg->data;
 }
 
 int main(int argc, char **argv)

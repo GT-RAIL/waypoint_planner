@@ -70,6 +70,10 @@ private:
 
   geometry_msgs::Vector3 default_human_dims;
 
+  double getValue(size_t waypoint, size_t t, size_t action_id);
+
+  size_t getIndex(size_t waypoint, size_t t, size_t action_id);
+
   size_t waypointToIndex(geometry_msgs::Point w);
 
   double reward(size_t state_id, size_t action_id, uint8_t mode);

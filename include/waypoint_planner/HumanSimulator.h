@@ -11,7 +11,7 @@
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Vector3.h>
 #include <tf2_ros/transform_broadcaster.h>
-#include <waypoint_planner/ChangeTime.h>
+#include <std_msgs/Float32.h>
 
 #include "waypoint_planner/EnvironmentSetup.h"
 
@@ -26,11 +26,12 @@ public:
 
 private:
 
+  void timeUpdateCallback(const std_msgs::Float32::ConstPtr& msg);
+
   ros::NodeHandle n, pnh;
 
   ros::Publisher human_marker_publisher;
-
-  ros::ServiceServer time_server;
+  ros::Subscriber time_update_subscriber;
 
   tf2_ros::TransformBroadcaster tf_broadcaster;
 
@@ -39,8 +40,6 @@ private:
   double speed_factor;
 
   visualization_msgs::Marker human_marker;
-
-  bool timeCallback(waypoint_planner::ChangeTime::Request &req, waypoint_planner::ChangeTime::Response &res);
 };
 
 #endif  // WAYPOINT_PLANNER_HUMAN_SIMULATOR_H_

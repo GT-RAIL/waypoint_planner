@@ -11,8 +11,11 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   time_step = step;
   t_end = static_cast<size_t>(time_horizon / time_step);
 
+  cout << "Setting time scale to end at time index: " << t_end << endl;
+
   loadTrajectory(move(trajectory_file_name));
   loadWaypoints(move(waypoint_file_name));
+  cout << "Loaded " << waypoints.size() << " waypoints." << endl;
 
   // initialize list of states
   for (size_t i = 0; i < waypoints.size(); i ++)
@@ -23,7 +26,11 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
     }
   }
 
+  cout << "Initialized " << states.size() << " states." << endl;
+
   SMDPFunctions::initializeActions(waypoints, actions);
+
+  cout << "Initialized " << waypoints.size() << " actions." << endl;
 
   default_human_dims.x = 0.5;
   default_human_dims.y = 0.4;
@@ -104,7 +111,7 @@ void LPSolver::constructModel(vector<double> total_costs)
 
           vector<double> dts;
           vector<double> dt_ps;
-          actions[k].duration(waypoints[states[j].waypoint_id], s_primes[j], dts, dt_ps);
+          actions[k].duration(waypoints[states[j].waypoint_id], s_primes[l], dts, dt_ps);
           // iterate through possible time durations to fully calculate T(s'|s,a) (with time)
           for (size_t m = 0; m < dts.size(); m ++)
           {
@@ -165,7 +172,7 @@ void LPSolver::solveModel(double timeout)
     total_attempts ++;
 
     cout << "Simplifying model for linearly dependent rows..." << endl;
-    set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_LINDEP, get_presolveloops(lp));
+//    set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_LINDEP, get_presolveloops(lp));
     cout << "Simplification complete." << endl;
 
     cout << "Attempting to solve model..." << endl;
@@ -216,6 +223,20 @@ void LPSolver::solveModel(double timeout)
 
   cout << "Results written.  Freeing up memory and returning." << endl;
   free(lp);
+
+  cout << "***********************************************\nnonzero values: " << endl;
+  for (size_t n = 0; n < waypoints.size(); n ++)
+  {
+    for (size_t i = 0; i < t_end + 1; i++)
+    {
+      for (size_t j = 0; j < actions.size(); j++)
+      {
+        if (getValue(n, i, j) > 0.00001)
+          cout << "\tw" << n << "(" << i << "), a" << j << ": " << getValue(n, i, j) << endl;
+      }
+    }
+  }
+  cout << "***********************************************" << endl;
 }
 
 void LPSolver::loadModel(string file_name)
@@ -230,6 +251,21 @@ void LPSolver::loadModel(string file_name)
     {
       ys.push_back(atof(line.c_str()));
     }
+    model_file.close();
+    cout << "***********************************************\nnonzero values: " << endl;
+    for (size_t n = 0; n < waypoints.size(); n ++)
+    {
+      for (size_t i = 0; i < t_end + 1; i++)
+      {
+        for (size_t j = 0; j < actions.size(); j++)
+        {
+          if (getValue(n, i, j) > 0.00001)
+            cout << "\tw" << n << "(" << i << "), a" << j << ": " << getValue(n, i, j) << endl;
+        }
+      }
+    }
+    cout << "***********************************************" << endl;
+    cout << "LP solution loaded." << endl;
   }
 }
 
@@ -263,14 +299,51 @@ void LPSolver::loadWaypoints(string file_name)
 
 Action LPSolver::getAction(geometry_msgs::Point s, double t)
 {
-  // return getAction(s, static_cast<size_t>(t / time_step));
-  return {0};
+  return getAction(s, static_cast<size_t>(t / time_step));
 }
 
 Action LPSolver::getAction(geometry_msgs::Point s, size_t t)
 {
-  // return action_map[waypointToIndex(s)][t];
-  return {0};
+  size_t waypoint_id = waypointToIndex(s);
+  cout << "Getting action for time step " << t << ", waypoint " << waypoint_id << "..." << endl;
+  size_t best_action_id = 0;
+  double max_value = 0;
+  for (size_t i = 0; i < actions.size(); i ++)
+  {
+    double test_value = getValue(waypoint_id, t, i);
+    if (test_value > max_value)
+    {
+      max_value = test_value;
+      best_action_id = i;
+    }
+  }
+
+  string str;
+  string mod;
+  if (actions[best_action_id].actionType() == Action::OBSERVE)
+    str = "Observe";
+  else
+  {
+    str = "Move";
+    std::stringstream ss("");
+    ss << waypointToIndex(actions[best_action_id].actionGoal());
+    mod = ss.str();
+  }
+
+  cout << "Best action: " << str << mod << ", with weight " << max_value << endl;
+
+  return actions[best_action_id];
+}
+
+double LPSolver::getValue(size_t waypoint, size_t t, size_t action_id)
+{
+  size_t state_id = waypoint*(t_end + 1) + t;
+  return ys[state_id*actions.size() + action_id];
+}
+
+size_t LPSolver::getIndex(size_t waypoint, size_t t, size_t action_id)
+{
+  return (waypoint*(t_end + 1) + t)*actions.size() + action_id;
 }
 
 // TODO: better lookup (hash waypoints to indices maybe?)
