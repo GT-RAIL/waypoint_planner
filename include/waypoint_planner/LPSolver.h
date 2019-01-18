@@ -57,6 +57,9 @@ private:
   std::vector<double> ys;
   std::vector<double> total_costs;
 
+  std::vector< std::vector< std::vector<size_t> > > index_map;  // index_map[state_id][time_step][action_id]=i for ys[i]
+  size_t num_variables;
+
   HumanTrajectory trajectory;
 
   double time_horizon;
@@ -70,15 +73,17 @@ private:
 
   geometry_msgs::Vector3 default_human_dims;
 
-  double getValue(size_t waypoint, size_t t, size_t action_id);
+  size_t getIndex(size_t waypoint_id, size_t t, size_t action_id);
 
-  size_t getIndex(size_t waypoint, size_t t, size_t action_id);
+  size_t getIndex(size_t state_id, size_t action_id);
 
   size_t waypointToIndex(geometry_msgs::Point w);
 
   double reward(size_t state_id, size_t action_id, uint8_t mode);
 
   void costConstraint(uint8_t mode, double threshold);
+
+  bool isValidAction(size_t waypoint_id, size_t action_id);
 };
 
 #endif  // WAYPOINT_PLANNER_LP_SOLVER_H_

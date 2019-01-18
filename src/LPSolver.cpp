@@ -30,7 +30,32 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
 
   SMDPFunctions::initializeActions(waypoints, actions);
 
-  cout << "Initialized " << waypoints.size() << " actions." << endl;
+  cout << "Initialized " << actions.size() << " actions." << endl;
+
+  cout << "Constructing (s(t), a) list..." << endl;
+
+  num_variables = 0;
+  index_map.resize(waypoints.size());
+  for (size_t i = 0; i < waypoints.size(); i ++)
+  {
+    index_map[i].resize(t_end + 1);
+    for (size_t j = 0; j <= t_end; j ++)
+    {
+      index_map[i][j].resize(actions.size());
+      for (size_t k = 0; k < actions.size(); k ++)
+      {
+        if (isValidAction(i, k))
+        {
+          index_map[i][j][k] = num_variables;
+          num_variables ++;
+        }
+        else
+        {
+          index_map[i][j][k] = std::numeric_limits<size_t>::max();
+        }
+      }
+    }
+  }
 
   default_human_dims.x = 0.5;
   default_human_dims.y = 0.4;
@@ -47,8 +72,7 @@ void LPSolver::constructModel(vector<double> total_costs)
 
   cout << "Constructing LP model..." << endl;
 
-  // construct lp with |S_t|*|A| variables
-  int num_variables = states.size() * actions.size();
+  // construct lp with |S_t|*|A| variables (for A valid depending on the state)
   lp = make_lp(0, num_variables);
   cout << "Model created with " << num_variables << " variables." << endl;
 
@@ -59,7 +83,7 @@ void LPSolver::constructModel(vector<double> total_costs)
     for (size_t j = 0; j < actions.size(); j ++)
     {
       // note: lp_solve API uses 1-indexing, so all row indices have +1 at the end
-      row[i*actions.size() + j + 1] = reward(i, j, SMDPFunctions::REWARD);
+      row[getIndex(i, j) + 1] = reward(i, j, SMDPFunctions::REWARD);
     }
   }
   set_obj_fn(lp, row);
@@ -77,12 +101,19 @@ void LPSolver::constructModel(vector<double> total_costs)
       cout << "\t" << (static_cast<double>(i)/(states.size() - 1))*100 << "%, " << updated << " transition probabilities used..." << endl;
 
     // constraint for each s'
-    REAL crow[1 + num_variables] = {0};
+    REAL crow[1 + num_variables];
+    for (size_t j = 0; j < 1 + num_variables; j ++)
+    {
+      crow[j] = 0;
+    }
 
     // left side (iterate over actions)
     for (size_t j = 0; j < actions.size(); j ++)
     {
-      crow[i*actions.size() + j + 1] = 1;
+      if (isValidAction(states[i].waypoint_id, j))
+      {
+        crow[getIndex(i, j) + 1] = 1;
+      }
     }
 
     // right side (iterate over states and actions)
@@ -96,6 +127,11 @@ void LPSolver::constructModel(vector<double> total_costs)
 
       for (size_t k = 0; k < actions.size(); k ++)
       {
+        if (!isValidAction(states[j].waypoint_id, k))
+        {
+          continue;
+        }
+
         vector<geometry_msgs::Point> s_primes;
         vector<double> transition_ps;
         SMDPFunctions::transitionModel(waypoints[states[j].waypoint_id], actions[k], s_primes, transition_ps);
@@ -122,7 +158,7 @@ void LPSolver::constructModel(vector<double> total_costs)
             double t_prob = t_waypoint_p*dt_ps[m];
             if (t_time_id <= t_end && t_prob > 0)
             {
-              crow[j*actions.size() + k + 1] -= t_prob;
+              crow[getIndex(j, k) + 1] -= t_prob;
               updated ++;
             }
           }
@@ -199,10 +235,10 @@ void LPSolver::solveModel(double timeout)
   cout << "Constraint 2: " << constr_results[get_Nrows(lp) - 1] << endl;
 
   cout << "Retrieving results..." << endl;
-  REAL vars[states.size() * actions.size()];
+  REAL vars[num_variables];
   get_variables(lp, vars);
   cout << "Copying results to this object for future use..." << endl;
-  for (int i = 0; i < states.size() * actions.size(); i++)
+  for (int i = 0; i < num_variables; i++)
   {
     ys.push_back(vars[i]);
   }
@@ -210,7 +246,7 @@ void LPSolver::solveModel(double timeout)
   std::ofstream var_file(ros::package::getPath("waypoint_planner") + "/config/var_results.txt");
   if (var_file.is_open())
   {
-    for (int i = 0; i < states.size() * actions.size(); i++)
+    for (int i = 0; i < num_variables; i++)
     {
       var_file << vars[i] << endl;
     }
@@ -231,8 +267,11 @@ void LPSolver::solveModel(double timeout)
     {
       for (size_t j = 0; j < actions.size(); j++)
       {
-        if (getValue(n, i, j) > 0.00001)
-          cout << "\tw" << n << "(" << i << "), a" << j << ": " << getValue(n, i, j) << endl;
+        if (isValidAction(n, j))
+        {
+          if (ys[getIndex(n, i, j)] > 0.00001)
+            cout << "\tw" << n << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
+        }
       }
     }
   }
@@ -259,8 +298,11 @@ void LPSolver::loadModel(string file_name)
       {
         for (size_t j = 0; j < actions.size(); j++)
         {
-          if (getValue(n, i, j) > 0.00001)
-            cout << "\tw" << n << "(" << i << "), a" << j << ": " << getValue(n, i, j) << endl;
+          if (isValidAction(n, j))
+          {
+            if (ys[getIndex(n, i, j)] > 0.00001)
+              cout << "\tw" << n << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
+          }
         }
       }
     }
@@ -271,12 +313,20 @@ void LPSolver::loadModel(string file_name)
 
 void LPSolver::costConstraint(uint8_t mode, double threshold)
 {
-  REAL crow[1 + states.size() * actions.size()] = {0};
+  REAL crow[num_variables + 1];
+  for (unsigned int i = 0; i < num_variables + 1; i ++)
+  {
+    crow[i] = 0;
+  }
+
   for (size_t i = 0; i < states.size(); i ++)
   {
     for (size_t j = 0; j < actions.size(); j ++)
     {
-      crow[i*actions.size() + j + 1] = reward(i, j, mode);
+      if (isValidAction(states[i].waypoint_id, j))
+      {
+        crow[getIndex(i, j) + 1] = reward(i, j, mode);
+      }
     }
   }
   add_constraint(lp, crow, LE, threshold);
@@ -307,14 +357,47 @@ Action LPSolver::getAction(geometry_msgs::Point s, size_t t)
   size_t waypoint_id = waypointToIndex(s);
   cout << "Getting action for time step " << t << ", waypoint " << waypoint_id << "..." << endl;
   size_t best_action_id = 0;
-  double max_value = 0;
+//  double max_value = 0;
+  double sum = 0;
+  vector<size_t> possible_actions;
+  vector<double> ps;
   for (size_t i = 0; i < actions.size(); i ++)
   {
-    double test_value = getValue(waypoint_id, t, i);
-    if (test_value > max_value)
+    if (isValidAction(waypoint_id, i))
     {
-      max_value = test_value;
-      best_action_id = i;
+      double test_value = ys[getIndex(waypoint_id, t, i)];
+      if (test_value > 0)
+      {
+        sum += test_value;
+        possible_actions.push_back(i);
+        ps.push_back(test_value);
+      }
+//      // Old code: deterministic action selection
+//      if (test_value > max_value)
+//      {
+//        max_value = test_value;
+//        best_action_id = i;
+//      }
+    }
+  }
+
+  // normalize probabilities
+  for (unsigned int i = 0; i < ps.size(); i ++)
+  {
+    ps[i] /= sum;
+  }
+
+  double n = static_cast<double>(rand())/RAND_MAX;
+  double selected_p = 0;
+  sum = 0;
+  for (unsigned int i = 0; i < ps.size(); i ++)
+  {
+    sum += ps[i];
+    if (sum > n)
+    {
+      best_action_id = possible_actions[i];
+      selected_p = ps[i];
+      break;
     }
   }
 
@@ -330,20 +413,19 @@ Action LPSolver::getAction(geometry_msgs::Point s, size_t t)
     mod = ss.str();
   }
 
-  cout << "Best action: " << str << mod << ", with weight " << max_value << endl;
+  cout << "Best action: " << str << mod << ", with probability " << selected_p << endl;
 
   return actions[best_action_id];
 }
 
-double LPSolver::getValue(size_t waypoint, size_t t, size_t action_id)
+size_t LPSolver::getIndex(size_t waypoint_id, size_t t, size_t action_id)
 {
-  size_t state_id = waypoint*(t_end + 1) + t;
-  return ys[state_id*actions.size() + action_id];
+  return index_map[waypoint_id][t][action_id];
 }
 
-size_t LPSolver::getIndex(size_t waypoint, size_t t, size_t action_id)
+size_t LPSolver::getIndex(size_t state_id, size_t action_id)
 {
-  return (waypoint*(t_end + 1) + t)*actions.size() + action_id;
+  return getIndex(states[state_id].waypoint_id, states[state_id].time_index, action_id);
 }
 
 // TODO: better lookup (hash waypoints to indices maybe?)
@@ -366,6 +448,14 @@ double LPSolver::reward(size_t state_id, size_t action_id, uint8_t mode)
                                actions[action_id], mode);
 }
 
+bool LPSolver::isValidAction(size_t waypoint_id, size_t action_id)
+{
+  return !(actions[action_id].actionType() == Action::MOVE
+    && waypoints[waypoint_id].x == actions[action_id].actionGoal().x
+    && waypoints[waypoint_id].y == actions[action_id].actionGoal().y
+    && waypoints[waypoint_id].z == actions[action_id].actionGoal().z);
+}
+
 StateWithTime::StateWithTime(size_t waypoint_id, size_t time_index)
 {
   this->waypoint_id = waypoint_id;
@@ -386,3 +476,5 @@ size_t StateWithTime::stateToIndex(size_t waypoint_id, size_t time_index, size_t
 {
   return waypoint_id*max_time_steps + time_index;
 }
+
+
