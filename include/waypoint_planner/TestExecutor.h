@@ -7,6 +7,7 @@
 #include <visualization_msgs/Marker.h>
 
 #include "waypoint_planner/LPSolver.h"
+#include "waypoint_planner/MCTSSolver.h"
 #include "waypoint_planner/SMDPSolver.h"
 
 class TestExecutor
@@ -21,6 +22,8 @@ public:
 
     bool run(double sim_step);
 
+    void reportResults();
+
 private:
   ros::NodeHandle n, pnh;
 
@@ -29,6 +32,7 @@ private:
 
   SMDPSolver solver;
   LPSolver lp_solver;
+  MCTSSolver mcts_solver;
 
   geometry_msgs::Point waypoint;
   double time_horizon;
@@ -36,7 +40,14 @@ private:
   double current_time;
   double next_decision;
 
+  // execution metrics
+  double r;
+  double c1;
+  double c2;
+
   Action current_action;
+  HumanTrajectory trajectory;
+  geometry_msgs::Vector3 default_human_dims;
 
   visualization_msgs::Marker robot_marker;
 

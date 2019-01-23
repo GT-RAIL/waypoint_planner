@@ -122,6 +122,8 @@ add_executable(test_executor
   src/HumanTrajectory.cpp
   src/RewardsAndCosts.cpp
   src/SMDPFunctions.cpp
+  src/StateWithTime.cpp
+  src/MCTSSolver.cpp
 )
 add_dependencies(
   test_executor

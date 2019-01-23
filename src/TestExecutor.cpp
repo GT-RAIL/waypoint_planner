@@ -9,6 +9,7 @@ const uint8_t TestExecutor::LP_LOAD = 2;
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights) :
     solver(horizon, step, mode, "iss_trajectory.yaml", "iss_waypoints.csv", weights),
     lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),
+    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_awypoints.csv"),
     current_action(Action::OBSERVE),
     pnh("~")
 {
@@ -16,9 +17,16 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
 
   this->approach = approach;
 
+  std::string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/iss_trajectory.yaml";
+  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
+
+  default_human_dims.x = 0.5;
+  default_human_dims.y = 0.4;
+  default_human_dims.z = 1.4;
+
   if (this->approach == LP_SOLVE)
   {
-    lp_solver.constructModel({1, 75});  // constraint thresholds {d1, d2}
+    lp_solver.constructModel({1, 15});  // constraint thresholds {d1, d2}
     lp_solver.solveModel(600);  // solver timeout (s) before restarting
     ROS_INFO("LP model solved.");
   }
@@ -42,6 +50,10 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   waypoint.x = 11.39;
   waypoint.y = -10.12;
   waypoint.z = 4.45;
+
+  r = 0;
+  c1 = 0;
+  c2 = 0;
 
   robot_vis_publisher = pnh.advertise<visualization_msgs::Marker>("test_robot_vis", 1, this);
   human_sim_time_publisher = n.advertise<std_msgs::Float32>("human_simulator/time_update", 1, this);
@@ -114,6 +126,15 @@ bool TestExecutor::run(double sim_step)
     }
     next_decision = current_time + duration;
     ROS_INFO("Action duration: %f", duration);
+
+    // calculate rewards and costs and add them to the totals
+    if (current_action.actionType() == Action::OBSERVE)
+    {
+      r += RewardsAndCosts::reward_recognition(trajectory.getPose(current_time), default_human_dims, waypoint) *
+           duration;
+      c1 += RewardsAndCosts::cost_collision(trajectory.getPose(current_time), default_human_dims, waypoint) * duration;
+      c2 += RewardsAndCosts::cost_intrusion(trajectory.getPose(current_time), waypoint) * duration;
+    }
   }
 
   // update fake execution time
@@ -128,17 +149,25 @@ bool TestExecutor::run(double sim_step)
   return current_time > time_horizon;
 }
 
+void TestExecutor::reportResults()
+{
+  std::cout << "Trial complete." << std::endl;
+  std::cout << "Total accumulated reward: " << r << std::endl;
+  std::cout << "Total accumulated collision cost: " << c1 << std::endl;
+  std::cout << "Total accumulated intrusion cost: " << c2 << std::endl;
+}
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
   vector<double> weights{0.333333, 0.333333, 0.333333};
-//  TestExecutor te(155, 1.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights);
   TestExecutor te(150, 1.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights);
+//  TestExecutor te(150, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
 
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;
 
-  ros::Rate loop_rate(1000);
+  ros::Rate loop_rate(100000);
   while (ros::ok())
   {
     ros::spinOnce();
@@ -149,6 +178,8 @@ int main(int argc, char **argv)
     }
     loop_rate.sleep();
   }
+
+  te.reportResults();
 
   return EXIT_SUCCESS;
 }
