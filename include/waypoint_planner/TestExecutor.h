@@ -16,6 +16,7 @@ public:
     static const uint8_t SMDP;
     static const uint8_t LP_SOLVE;
     static const uint8_t LP_LOAD;
+    static const uint8_t MCTS;
 
     TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode=SMDPFunctions::LINEARIZED_COST,
         std::vector<double> weights = {});

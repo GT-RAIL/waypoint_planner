@@ -5,11 +5,12 @@ using std::vector;
 const uint8_t TestExecutor::SMDP = 0;
 const uint8_t TestExecutor::LP_SOLVE = 1;
 const uint8_t TestExecutor::LP_LOAD = 2;
+const uint8_t TestExecutor::MCTS = 3;
 
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights) :
-    solver(horizon, step, mode, "iss_trajectory.yaml", "iss_waypoints.csv", weights),
-    lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),
-    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_awypoints.csv"),
+    solver(horizon, step, mode, "iss_trajectory.yaml", "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
+    lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),    // TODO: parameters here for optional values
+    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_awypoints.csv", {1.0, 75.0}),  // TODO: parameters here for optional values
     current_action(Action::OBSERVE),
     pnh("~")
 {

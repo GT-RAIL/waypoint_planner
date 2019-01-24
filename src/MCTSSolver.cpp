@@ -7,7 +7,7 @@ using std::endl;
 using std::max;
 using std::min;
 
-MCTSSolver::MCTSSolver(double horizon, double step, string trajectory_file_name, string waypoint_file_name)
+MCTSSolver::MCTSSolver(double horizon, double step, string trajectory_file_name, string waypoint_file_name, vector<double> constraints, double timeout_sec, size_t max_time_step_search_depth, double exploration_constant)
 {
   time_horizon = horizon;
   time_step = step;
@@ -63,23 +63,29 @@ MCTSSolver::MCTSSolver(double horizon, double step, string trajectory_file_name,
   default_human_dims.y = 0.4;
   default_human_dims.z = 1.4;
 
-  num_costs = 2;
-  lambda.resize(num_costs);
-  timeout = ros::Duration(10);
-  max_search_time_step_dst = 150;
+  num_costs = constraints.size();
+  cost_constraints.resize(num_costs);
+  for (size_t i = 0; i < constraints.size(); i ++)
+  {
+    cost_constraints[i] = constraints[i];
+  }
 
-  exploration_constant = 0.1;
+  lambda.resize(num_costs);
+  timeout = ros::Duration(timeout_sec);
+  max_search_time_step_dst = max_time_step_search_depth;
+
+  this->exploration_constant = exploration_constant;
 
   VC_s.resize(num_costs);
   QC_sa.resize(num_costs);
 }
 
-Action MCTSSolver::search(size_t waypoint_index, size_t time_step)
+size_t MCTSSolver::search(size_t waypoint_index, size_t time_step)
 {
   return search(StateWithTime(waypoint_index, time_step));
 }
 
-Action MCTSSolver::search(StateWithTime s0)
+size_t MCTSSolver::search(StateWithTime s0)
 {
   //initialize parameters
   for (auto lam : lambda)
@@ -89,19 +95,24 @@ Action MCTSSolver::search(StateWithTime s0)
   learning_rate = 1.0;
   max_search_time_step = min(s0.time_index + max_search_time_step_dst, t_end);
 
-  ros::Time end_time = ros::Time::now() + timeout;
+  ros::Time start_time = ros::Time::now();
+  ros::Time end_time = start_time + timeout;
   while (ros::Time::now() < end_time)
   {
     simulate(s0);
-    Action a = greedyPolicy(s0, 0);
-    for (auto lam : lambda)
+    size_t a_id = greedyPolicy(s0, 0);
+    for (size_t i = 0; i < lambda.size(); i ++)
     {
-      // TODO: update lambdas
+      // update lambdas
+      lambda[i] += learning_rate*(QC_sa[i][getIndexSA(s0.waypoint_id, s0.time_index, a_id)] - cost_constraints[i]);
 
       // clip lambdas to [0, infinity)
       // NOTE: if using discounts, this needs to be updated to R_max/(tau*(1-gamma))
-      lam = max(0.0, lam);
+      lambda[i] = max(0.0, lambda[i]);
     }
+
+    // update learning rate
+    learning_rate = 1.0/(1 + 10*(ros::Time::now() - start_time).toSec());
   }
 
   return greedyPolicy(s0, 0);
@@ -178,8 +189,23 @@ vector<double> MCTSSolver::rollout(StateWithTime s)
     return vector<double>(num_costs + 1);  // size: 1 + costs; order: {R, C0, C1, ..., Cn}
   }
 
-  // TODO: select an action (with a uniform(?) policy)
-  size_t a_id = greedyPolicy(s, exploration_constant);  // TODO: this should not be greedyPolicy
+  // select an action (with a uniform(?) policy)
+  size_t a_id = 0;  // observe action
+  if (static_cast<double>(rand())/RAND_MAX > 0.5)  // take observe with probability 0.5, otherwise select uniformly
+  {
+    double p = 0.0;
+    double increment = 1.0/actions.size();
+    double selection = static_cast<double>(rand())/RAND_MAX;
+    for (size_t i = 0; i < actions.size(); i ++)
+    {
+      p += increment;
+      if (p > selection)
+      {
+        a_id = i;
+        break;
+      }
+    }
+  }
 
   // simulate the selected action, calculate costs and rewards
   // NOTE: this currently doesn't use the state transition function, as actions deterministically move to new states
@@ -198,8 +224,69 @@ vector<double> MCTSSolver::rollout(StateWithTime s)
 
 size_t MCTSSolver::greedyPolicy(StateWithTime s, double kappa)
 {
-  // TODO: implement
+  size_t s_index = getIndexS(s);
+  vector<size_t> best_actions;
+  double best_q = -999999999;  // TODO: numeric_limits...
+  for (size_t i = 0; i < actions.size(); i ++)
+  {
+    if (isValidAction(s.waypoint_id, i))
+    {
+      size_t sa_index = getIndexSA(s.waypoint_id, s.time_index, i);
+      double q = QR_sa[sa_index];
+      for (size_t j = 0; j < lambda.size(); j ++)
+      {
+        q -= lambda[j]*QC_sa[j][sa_index];
+      }
+      if (N_sa.count(sa_index) == 1 && N_sa[sa_index] > 0)
+      {
+        q += kappa*sqrt(log(N_s[s_index])/N_sa[sa_index]);
+      }
 
+      if (q > best_q)
+      {
+        best_actions.clear();
+        best_actions.push_back(i);
+        best_q = q;
+      }
+      else if (q == best_q)
+      {
+        best_actions.push_back(i);
+      }
+    }
+  }
+
+  // currently select uniformly as an approximation to avoid solving a convex optimization problem
+  size_t best_action = best_actions[0];
+  if (best_actions.size() > 1)
+  {
+    double p = 0;
+    double increment = 1.0/best_actions.size();
+    double selection = static_cast<double>(rand())/RAND_MAX;
+    for (auto a : best_actions)
+    {
+      p += increment;
+      if (p > selection)
+      {
+        best_action = a;
+        break;
+      }
+    }
+  }
+  return best_action;
+}
+
+void MCTSSolver::setConstraints(vector<double> constraints)
+{
+  if (constraints.size() != cost_constraints.size())
+  {
+    cout << "New costs do not match the number of constraints!" << endl;
+    cout << "Cost constraints were not updated." << endl;
+    return;
+  }
+  for (size_t i = 0; i < constraints.size(); i ++)
+  {
+    cost_constraints[i] = constraints[i];
+  }
 }
 
 StateWithTime MCTSSolver::simulate_action(StateWithTime s, Action a, vector<double> &result_costs)
@@ -286,68 +373,7 @@ Action MCTSSolver::getAction(geometry_msgs::Point s, double t)
 
 Action MCTSSolver::getAction(geometry_msgs::Point s, size_t t)
 {
-//  size_t waypoint_id = waypointToIndex(s);
-//  cout << "Getting action for time step " << t << ", waypoint " << waypoint_id << "..." << endl;
-//  size_t best_action_id = 0;
-////  double max_value = 0;
-//  double sum = 0;
-//  vector<size_t> possible_actions;
-//  vector<double> ps;
-//  for (size_t i = 0; i < actions.size(); i ++)
-//  {
-//    if (isValidAction(waypoint_id, i))
-//    {
-//      double test_value = ys[getIndex(waypoint_id, t, i)];
-//      if (test_value > 0)
-//      {
-//        sum += test_value;
-//        possible_actions.push_back(i);
-//        ps.push_back(test_value);
-//      }
-////      // Old code: deterministic action selection
-////      if (test_value > max_value)
-////      {
-////        max_value = test_value;
-////        best_action_id = i;
-////      }
-//    }
-//  }
-//
-//  // normalize probabilities
-//  for (unsigned int i = 0; i < ps.size(); i ++)
-//  {
-//    ps[i] /= sum;
-//  }
-//
-//  double n = static_cast<double>(rand())/RAND_MAX;
-//  double selected_p = 0;
-//  sum = 0;
-//  for (unsigned int i = 0; i < ps.size(); i ++)
-//  {
-//    sum += ps[i];
-//    if (sum > n)
-//    {
-//      best_action_id = possible_actions[i];
-//      selected_p = ps[i];
-//      break;
-//    }
-//  }
-//
-//  string str;
-//  string mod;
-//  if (actions[best_action_id].actionType() == Action::OBSERVE)
-//    str = "Observe";
-//  else
-//  {
-//    str = "Move";
-//    std::stringstream ss("");
-//    ss << waypointToIndex(actions[best_action_id].actionGoal());
-//    mod = ss.str();
-//  }
-//
-//  cout << "Best action: " << str << mod << ", with probability " << selected_p << endl;
-//
-//  return actions[best_action_id];
+  return actions[greedyPolicy(StateWithTime(waypointToIndex(s), t), 0)];
 }
 
 // TODO: better lookup (hash waypoints to indices maybe?)

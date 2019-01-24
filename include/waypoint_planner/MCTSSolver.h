@@ -18,12 +18,12 @@
 class MCTSSolver
 {
 public:
-  MCTSSolver(double horizon, double step, std::string trajectory_file_name="iss_trajectory.yaml",
-      std::string waypoint_file_name="iss_waypoints.csv");
+  MCTSSolver(double horizon, double step, std::string trajectory_file_name,
+      std::string waypoint_file_name, std::vector<double> constraints, double timeout_sec=10.0, size_t max_time_step_search_depth=150, double exploration_constant=0.1);
 
-  Action search(size_t waypoint_index, size_t time_step);
+  size_t search(size_t waypoint_index, size_t time_step);
 
-  Action search(StateWithTime s0);
+  size_t search(StateWithTime s0);
 
   void loadTrajectory(std::string file_name);
 
@@ -32,6 +32,8 @@ public:
   Action getAction(geometry_msgs::Point s, double t);
 
   Action getAction(geometry_msgs::Point s, size_t t);
+
+  void setConstraints(std::vector<double> constraints);
 
 private:
   std::vector<geometry_msgs::Point> waypoints;
@@ -50,6 +52,9 @@ private:
   geometry_msgs::Vector3 default_human_dims;
 
   size_t num_costs;
+
+  // Max expected accumulated costs
+  std::vector<double> cost_constraints;
 
   // CCUCT gradient descent parameters
   std::vector<double> lambda;
