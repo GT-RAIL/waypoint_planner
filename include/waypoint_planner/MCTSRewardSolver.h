@@ -1,5 +1,5 @@
-#ifndef WAYPOINT_PLANNER_MCTS_SOLVER_H_
-#define WAYPOINT_PLANNER_MCTS_SOLVER_H_
+#ifndef WAYPOINT_PLANNER_MCTS_REWARD_SOLVER_H_
+#define WAYPOINT_PLANNER_MCTS_REWARD_SOLVER_H_
 
 #include <iostream>
 
@@ -17,10 +17,10 @@
 #include "waypoint_planner/State.h"
 #include "waypoint_planner/StateWithTime.h"
 
-class MCTSSolver
+class MCTSRewardSolver
 {
 public:
-  MCTSSolver(double horizon, double step, std::string trajectory_file_name,
+    MCTSRewardSolver(double horizon, double step, std::string trajectory_file_name,
       std::string waypoint_file_name, std::vector<double> constraints, double timeout_sec=10.0, size_t max_time_step_search_depth=150, double exploration_constant=1.0);
 
   Action search(geometry_msgs::Point w, double t);
@@ -36,8 +36,6 @@ public:
   Action getAction(geometry_msgs::Point s, double t);
 
   Action getAction(geometry_msgs::Point s, size_t t);
-
-  void updateConstraints(geometry_msgs::Point s, double t);
 
   void setConstraints(std::vector<double> constraints);
 
@@ -65,9 +63,7 @@ private:
   // Max expected accumulated costs
   std::vector<double> cost_constraints;
 
-  // CCUCT gradient descent parameters
-  std::vector<double> lambda;
-  double learning_rate;  // a function of time
+  // UCT parameters
   double exploration_constant;
   ros::Duration timeout;
   size_t max_search_time_step;
@@ -76,17 +72,16 @@ private:
   // lookup tables for rollouts
   std::map<size_t, double> N_s;
   std::map<size_t, double> N_sa;
-  std::vector< std::map<size_t, double> > VC_s;
   std::map<size_t, double> QR_sa;
   std::vector< std::map<size_t, double> > QC_sa;
 
   std::vector<double> simulate(StateWithTime s);
 
-  size_t greedyPolicy(StateWithTime s, double kappa);
-
-  std::vector<double> rollout(StateWithTime s);
+  size_t greedyPolicy(StateWithTime s, double kappa, bool constrained);
 
   StateWithTime simulate_action(StateWithTime s, Action a, std::vector<double> &result_costs);
+
+  size_t uniformSelect(std::vector<size_t> actions);
 
   size_t getIndexSA(size_t waypoint_id, size_t t, size_t action_id);
 
@@ -105,4 +100,4 @@ private:
   size_t waypointHash(geometry_msgs::Point w);
 };
 
-#endif  // WAYPOINT_PLANNER_MCTS_SOLVER_H_
+#endif  // WAYPOINT_PLANNER_MCTS_REWARD_SOLVER_H_

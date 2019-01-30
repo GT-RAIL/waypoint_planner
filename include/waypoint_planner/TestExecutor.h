@@ -8,6 +8,7 @@
 
 #include "waypoint_planner/LPSolver.h"
 #include "waypoint_planner/MCTSSolver.h"
+#include "waypoint_planner/MCTSRewardSolver.h"
 #include "waypoint_planner/SMDPSolver.h"
 
 class TestExecutor
@@ -34,6 +35,10 @@ private:
   SMDPSolver solver;
   LPSolver lp_solver;
   MCTSSolver mcts_solver;
+  MCTSRewardSolver mcts_reward_solver;
+
+  double c1_hat;
+  double c2_hat;
 
   geometry_msgs::Point waypoint;
   double time_horizon;

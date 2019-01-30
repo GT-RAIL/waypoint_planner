@@ -124,6 +124,7 @@ add_executable(test_executor
   src/SMDPFunctions.cpp
   src/StateWithTime.cpp
   src/MCTSSolver.cpp
+  src/MCTSRewardSolver.cpp
 )
 add_dependencies(
   test_executor

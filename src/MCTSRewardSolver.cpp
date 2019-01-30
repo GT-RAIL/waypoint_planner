@@ -1,4 +1,4 @@
-#include "waypoint_planner/MCTSSolver.h"
+#include "waypoint_planner/MCTSRewardSolver.h"
 
 using std::string;
 using std::vector;
@@ -7,7 +7,7 @@ using std::endl;
 using std::max;
 using std::min;
 
-MCTSSolver::MCTSSolver(double horizon, double step, string trajectory_file_name, string waypoint_file_name, vector<double> constraints, double timeout_sec, size_t max_time_step_search_depth, double exploration_constant)
+MCTSRewardSolver::MCTSRewardSolver(double horizon, double step, string trajectory_file_name, string waypoint_file_name, vector<double> constraints, double timeout_sec, size_t max_time_step_search_depth, double exploration_constant)
 {
   time_horizon = horizon;
   time_step = step;
@@ -26,8 +26,6 @@ MCTSSolver::MCTSSolver(double horizon, double step, string trajectory_file_name,
   loadWaypoints(move(waypoint_file_name));
   cout << "Loaded " << waypoints.size() << " waypoints." << endl;
 
-  VC_s.resize(num_costs);
-
   // initialize list of states, waypoint hashes
   for (size_t i = 0; i < waypoints.size(); i ++)
   {
@@ -36,10 +34,6 @@ MCTSSolver::MCTSSolver(double horizon, double step, string trajectory_file_name,
     {
       states.emplace_back(StateWithTime(i, j));
       N_s[getIndexS(i, j)] = 0;
-      for (size_t k = 0; k < VC_s.size(); k ++)
-      {
-        VC_s[k][getIndexS(i, j)] = 0;
-      }
     }
   }
 
@@ -86,31 +80,24 @@ MCTSSolver::MCTSSolver(double horizon, double step, string trajectory_file_name,
   default_human_dims.y = 0.4;
   default_human_dims.z = 1.4;
 
-  lambda.resize(num_costs);
   timeout = ros::Duration(timeout_sec);
   max_search_time_step_dst = max_time_step_search_depth;
 
   this->exploration_constant = exploration_constant;
 }
 
-Action MCTSSolver::search(geometry_msgs::Point w, double t)
+Action MCTSRewardSolver::search(geometry_msgs::Point w, double t)
 {
   return search(waypointToIndex(w), static_cast<size_t>(t / time_step));
 }
 
-Action MCTSSolver::search(size_t waypoint_index, size_t time_step)
+Action MCTSRewardSolver::search(size_t waypoint_index, size_t time_step)
 {
   return search(StateWithTime(waypoint_index, time_step));
 }
 
-Action MCTSSolver::search(StateWithTime s0)
+Action MCTSRewardSolver::search(StateWithTime s0)
 {
-  //initialize parameters
-  for (size_t i = 0; i < lambda.size(); i ++)
-  {
-    lambda[i] = static_cast<double>(rand())/RAND_MAX;
-  }
-  learning_rate = 1.0;
   max_search_time_step = min(s0.time_index + max_search_time_step_dst, t_end);
 
 //  // TODO: temporary testing; reset everything each search step
@@ -152,29 +139,15 @@ Action MCTSSolver::search(StateWithTime s0)
   while (ros::Time::now() < end_time)
   {
     simulate(s0);
-    size_t a_id = greedyPolicy(s0, 0);  // need exploration here or it always takes the same action
-    for (size_t i = 0; i < lambda.size(); i ++)
-    {
-      // update lambdas
-      lambda[i] += learning_rate*(QC_sa[i][getIndexSA(s0.waypoint_id, s0.time_index, a_id)] - cost_constraints[i]);
-
-      // clip lambdas to [0, infinity)
-      // NOTE: if using discounts, this needs to be updated to R_max/(tau*(1-gamma))
-      lambda[i] = max(0.0, lambda[i]);
-    }
-
-    // update learning rate
-    learning_rate = 1.0/(1 + 10*(ros::Time::now() - start_time).toSec());
     iterations ++;
   }
 
   cout << "MCTS performed " << iterations << " rollouts over " << (ros::Time::now() - start_time).toSec() <<
     " seconds." << endl;
 
-  size_t best_a_id = greedyPolicy(s0, 0);
+  size_t best_a_id = greedyPolicy(s0, 0, true);
 
   cout << "Action selected: " << best_a_id << endl;
-  cout << "\tLambda: [" << lambda[0] << ", " << lambda[1] << "]" << endl;
   cout << "\tExpected results: " << endl;
   for (size_t i = 0; i < actions.size(); i ++)
   {
@@ -188,7 +161,7 @@ Action MCTSSolver::search(StateWithTime s0)
   return actions[best_a_id];
 }
 
-vector<double> MCTSSolver::simulate(StateWithTime s)
+vector<double> MCTSRewardSolver::simulate(StateWithTime s)
 {
   // simulation rollout termination
   if (s.time_index >= max_search_time_step)
@@ -226,7 +199,7 @@ vector<double> MCTSSolver::simulate(StateWithTime s)
 //  }
 
   // select an action (with an exploration tradeoff)
-  size_t a_id = greedyPolicy(s, exploration_constant);
+  size_t a_id = greedyPolicy(s, exploration_constant, false);
 
   // simulate the selected action, calculate costs and rewards
   // NOTE: this currently doesn't use the state transition function, as actions deterministically move to new states
@@ -244,57 +217,16 @@ vector<double> MCTSSolver::simulate(StateWithTime s)
   N_s[s_index] += 1;
   N_sa[sa_index] += 1;
   QR_sa[sa_index] += (total_costs[0] - QR_sa[sa_index])/N_sa[sa_index];
-  for (size_t i = 0; i < VC_s.size(); i ++)
+  for (size_t i = 0; i < QC_sa.size(); i ++)
   {
-    VC_s[i][s_index] += (total_costs[i + 1] - VC_s[i][s_index])/N_s[s_index];
     QC_sa[i][sa_index] += (total_costs[i + 1] - QC_sa[i][sa_index])/N_sa[sa_index];
   }
 
   return total_costs;
 }
 
-//vector<double> MCTSSolver::rollout(StateWithTime s)
-//{
-//  // simulation rollout termination
-//  if (s.time_index >= max_search_time_step)
-//  {
-//    return vector<double>(num_costs + 1);  // size: 1 + costs; order: {R, C0, C1, ..., Cn}
-//  }
-//
-//  // select an action (with a uniform(?) policy)
-//  size_t a_id = 0;  // observe action
-////  if (static_cast<double>(rand())/RAND_MAX > 0.5)  // take observe with probability 0.5, otherwise select uniformly
-////  {
-////    double p = 0.0;
-////    double increment = 1.0/actions.size();
-////    double selection = static_cast<double>(rand())/RAND_MAX;
-////    for (size_t i = 0; i < actions.size(); i ++)
-////    {
-////      p += increment;
-////      if (p > selection)
-////      {
-////        a_id = i;
-////        break;
-////      }
-////    }
-////  }
-//
-//  // simulate the selected action, calculate costs and rewards
-//  // NOTE: this currently doesn't use the state transition function, as actions deterministically move to new states
-//  vector<double> total_costs(num_costs + 1);  // size: 1 + costs; order: {R, C0, C1, ..., Cn}
-//  StateWithTime s_prime = simulate_action(s, actions[a_id], total_costs);
-//
-//  vector<double> costs_to_go = rollout(s_prime);
-//  for (size_t i = 0; i < total_costs.size(); i ++)
-//  {
-//    // NOTE: if using discount, this needs to be updated to gamma*costs_to_go[i]
-//    total_costs[i] += costs_to_go[i];
-//  }
-//
-//  return total_costs;
-//}
-
-size_t MCTSSolver::greedyPolicy(StateWithTime s, double kappa)
+// TODO: parameter for selecting only a non-constraint-violating action (or uniform if that's impossible)
+size_t MCTSRewardSolver::greedyPolicy(StateWithTime s, double kappa, bool constrained)
 {
   size_t s_index = getIndexS(s);
 
@@ -327,7 +259,9 @@ size_t MCTSSolver::greedyPolicy(StateWithTime s, double kappa)
   }
 
   vector<size_t> best_actions;
+  vector<size_t> best_constrained_actions;
   double best_q = std::numeric_limits<double>::lowest();
+  double best_q_constrained = std::numeric_limits<double>::lowest();
   for (size_t i = 0; i < actions.size(); i ++)
   {
     if (isValidAction(s.waypoint_id, i))
@@ -335,10 +269,6 @@ size_t MCTSSolver::greedyPolicy(StateWithTime s, double kappa)
       size_t sa_index = getIndexSA(s.waypoint_id, s.time_index, i);
 
       double q = QR_sa[sa_index];
-      for (size_t j = 0; j < lambda.size(); j ++)
-      {
-        q -= lambda[j]*QC_sa[j][sa_index];
-      }
 
       if (kappa != 0)
       {
@@ -354,25 +284,137 @@ size_t MCTSSolver::greedyPolicy(StateWithTime s, double kappa)
 
       if (q > best_q)
       {
-        best_actions.clear();
-        best_actions.push_back(i);
-        best_q = q;
+        bool violates_constraints = false;
+        for (size_t j = 0; j < QC_sa.size(); j++)
+        {
+          if (QC_sa[j][sa_index] > cost_constraints[j])
+          {
+            violates_constraints = true;
+            break;
+          }
+        }
+
+        if (violates_constraints)
+        {
+          if (q > best_q_constrained)
+          {
+            best_constrained_actions.clear();
+            best_constrained_actions.push_back(i);
+            best_q_constrained = q;
+          }
+          else if (q == best_q_constrained)
+          {
+            best_constrained_actions.push_back(i);
+          }
+        }
+        else
+        {
+          best_actions.clear();
+          best_actions.push_back(i);
+          best_q = q;
+        }
       }
       else if (q == best_q)
       {
-        best_actions.push_back(i);
+        bool violates_constraints = false;
+        for (size_t j = 0; j < QC_sa.size(); j++)
+        {
+          if (QC_sa[j][sa_index] > cost_constraints[j])
+          {
+            violates_constraints = true;
+            break;
+          }
+        }
+
+        if (violates_constraints)
+        {
+          if (q > best_q_constrained)
+          {
+            best_constrained_actions.clear();
+            best_constrained_actions.push_back(i);
+            best_q_constrained = q;
+          }
+          else if (q == best_q_constrained)
+          {
+            best_constrained_actions.push_back(i);
+          }
+        }
+        else
+        {
+          best_actions.push_back(i);
+        }
       }
     }
   }
 
   // currently select uniformly as an approximation to avoid solving a convex optimization problem
-  size_t best_action = best_actions[0];
-  if (best_actions.size() > 1)
+  size_t best_action;
+  if (constrained)
+  {
+    if (!best_actions.empty())
+    {
+      best_action = uniformSelect(best_actions);
+    }
+    else
+    {
+      best_action = 0;
+      if (static_cast<double>(rand())/RAND_MAX > 0.5)  // take observe with probability 0.5, otherwise select uniformly
+      {
+        double p = 0.0;
+        double increment = 1.0/actions.size();
+        double selection = static_cast<double>(rand())/RAND_MAX;
+        for (size_t i = 0; i < actions.size(); i ++)
+        {
+          p += increment;
+          if (p > selection)
+          {
+            best_action = i;
+            break;
+          }
+        }
+      }
+      while (!isValidAction(s.waypoint_id, best_action))
+      {
+        // if an invalid action was picked randomly, arbitrarily resolve to previous action (observe (id:0) always valid)
+        best_action --;
+      }
+    }
+  }
+  else
+  {
+    if (best_constrained_actions.empty())
+    {
+      best_action = uniformSelect(best_actions);
+    }
+    else if (best_actions.empty())
+    {
+      best_action = uniformSelect(best_constrained_actions);
+    }
+    else
+    {
+      if (static_cast<double>(rand()) / RAND_MAX > 0.5)
+      {
+        best_action = uniformSelect(best_actions);
+      }
+      else
+      {
+        best_action = uniformSelect(best_constrained_actions);
+      }
+    }
+  }
+
+  return best_action;
+}
+
+size_t MCTSRewardSolver::uniformSelect(vector<size_t> actions)
+{
+  size_t best_action = actions[0];
+  if (actions.size() > 1)
   {
     double p = 0;
-    double increment = 1.0/best_actions.size();
+    double increment = 1.0/actions.size();
     double selection = static_cast<double>(rand())/RAND_MAX;
-    for (auto a : best_actions)
+    for (auto a : actions)
     {
       p += increment;
       if (p > selection)
@@ -382,18 +424,11 @@ size_t MCTSSolver::greedyPolicy(StateWithTime s, double kappa)
       }
     }
   }
+
   return best_action;
 }
 
-void MCTSSolver::updateConstraints(geometry_msgs::Point s, double t)
-{
-  for (size_t i = 0; i < cost_constraints.size(); i ++)
-  {
-    cost_constraints[i] = VC_s[i][getIndexS(waypointToIndex(s), static_cast<size_t>(t / time_step))];
-  }
-}
-
-void MCTSSolver::setConstraints(vector<double> constraints)
+void MCTSRewardSolver::setConstraints(vector<double> constraints)
 {
   if (constraints.size() != cost_constraints.size())
   {
@@ -407,7 +442,7 @@ void MCTSSolver::setConstraints(vector<double> constraints)
   }
 }
 
-StateWithTime MCTSSolver::simulate_action(StateWithTime s, Action a, vector<double> &result_costs)
+StateWithTime MCTSRewardSolver::simulate_action(StateWithTime s, Action a, vector<double> &result_costs)
 {
   geometry_msgs::Point goal;
   if (a.actionType() == Action::MOVE)
@@ -451,50 +486,50 @@ StateWithTime MCTSSolver::simulate_action(StateWithTime s, Action a, vector<doub
   return s_prime;
 }
 
-size_t MCTSSolver::getIndexSA(size_t waypoint_id, size_t t, size_t action_id)
+size_t MCTSRewardSolver::getIndexSA(size_t waypoint_id, size_t t, size_t action_id)
 {
   return index_map[waypoint_id][t][action_id];
 }
 
-size_t MCTSSolver::getIndexSA(size_t state_id, size_t action_id)
+size_t MCTSRewardSolver::getIndexSA(size_t state_id, size_t action_id)
 {
   return getIndexSA(states[state_id].waypoint_id, states[state_id].time_index, action_id);
 }
 
-size_t MCTSSolver::getIndexS(StateWithTime s)
+size_t MCTSRewardSolver::getIndexS(StateWithTime s)
 {
   return getIndexS(s.waypoint_id, s.time_index);
 }
 
-size_t MCTSSolver::getIndexS(size_t waypoint_id, size_t t)
+size_t MCTSRewardSolver::getIndexS(size_t waypoint_id, size_t t)
 {
   return waypoint_id*(t_end + 1) + t;
 }
 
-void MCTSSolver::loadTrajectory(std::string file_name)
+void MCTSRewardSolver::loadTrajectory(std::string file_name)
 {
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + file_name;
 
   trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
 }
 
-void MCTSSolver::loadWaypoints(string file_name)
+void MCTSRewardSolver::loadWaypoints(string file_name)
 {
   string waypoint_file_path = ros::package::getPath("waypoint_planner") + "/config/" + file_name;
   EnvironmentSetup::readWaypoints(waypoint_file_path, waypoints);
 }
 
-Action MCTSSolver::getAction(geometry_msgs::Point s, double t)
+Action MCTSRewardSolver::getAction(geometry_msgs::Point s, double t)
 {
   return getAction(s, static_cast<size_t>(t / time_step));
 }
 
-Action MCTSSolver::getAction(geometry_msgs::Point s, size_t t)
+Action MCTSRewardSolver::getAction(geometry_msgs::Point s, size_t t)
 {
-  return actions[greedyPolicy(StateWithTime(waypointToIndex(s), t), 0)];
+  return actions[greedyPolicy(StateWithTime(waypointToIndex(s), t), 0, true)];
 }
 
-size_t MCTSSolver::waypointToIndex(geometry_msgs::Point w)
+size_t MCTSRewardSolver::waypointToIndex(geometry_msgs::Point w)
 {
 //  for (size_t i = 0; i < waypoints.size(); i ++)
 //  {
@@ -511,19 +546,19 @@ size_t MCTSSolver::waypointToIndex(geometry_msgs::Point w)
   return waypoints.size();  // error case, waypoint not found in list
 }
 
-size_t MCTSSolver::waypointHash(geometry_msgs::Point w)
+size_t MCTSRewardSolver::waypointHash(geometry_msgs::Point w)
 {
   return hasher({w.x, w.y, w.z});
 }
 
-double MCTSSolver::reward(size_t state_id, size_t action_id, uint8_t mode)
+double MCTSRewardSolver::reward(size_t state_id, size_t action_id, uint8_t mode)
 {
   return SMDPFunctions::reward(State(waypoints[states[state_id].waypoint_id],
                                      trajectory.getPose(states[state_id].time_index*time_step)),
                                actions[action_id], mode);
 }
 
-bool MCTSSolver::isValidAction(size_t waypoint_id, size_t action_id)
+bool MCTSRewardSolver::isValidAction(size_t waypoint_id, size_t action_id)
 {
   return !(actions[action_id].actionType() == Action::MOVE
     && waypoints[waypoint_id].x == actions[action_id].actionGoal().x

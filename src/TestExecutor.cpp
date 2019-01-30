@@ -10,10 +10,16 @@ const uint8_t TestExecutor::MCTS = 3;
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights) :
     solver(horizon, step, mode, "iss_trajectory.yaml", "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
     lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),    // TODO: parameters here for optional values
-    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_awypoints.csv", {1.0, 75.0}),  // TODO: parameters here for optional values
+    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 180.0,
+        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
+    mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 180.0,
+        static_cast<size_t>(horizon/step), 2.0),
     current_action(Action::OBSERVE),
     pnh("~")
 {
+  c1_hat = 1.0;
+  c2_hat = 75.0;
+
   srand(time(NULL));
 
   this->approach = approach;
@@ -95,6 +101,10 @@ bool TestExecutor::run(double sim_step)
     {
       current_action = lp_solver.getAction(waypoint, current_time);
     }
+    else if (approach == MCTS)
+    {
+      current_action = mcts_solver.search(waypoint, current_time);
+    }
 
     geometry_msgs::Point goal;
     if (current_action.actionType() == Action::MOVE)
@@ -128,14 +138,37 @@ bool TestExecutor::run(double sim_step)
     next_decision = current_time + duration;
     ROS_INFO("Action duration: %f", duration);
 
+    double r0 = RewardsAndCosts::reward_recognition(trajectory.getPose(current_time), default_human_dims, waypoint) *
+                duration;
+    double c1_0 = RewardsAndCosts::cost_collision(trajectory.getPose(current_time), default_human_dims, waypoint) * duration;
+    double c2_0 = RewardsAndCosts::cost_intrusion(trajectory.getPose(current_time), waypoint) * duration;
+    if (approach == MCTS)
+    {
+      // update cost thresholds
+      c1_hat -= c1_0;
+      c2_hat -= c2_0;
+      if (c1_hat < 0.01)
+      {
+        c1_hat = 0.01;
+      }
+      if (c2_hat < 0.01)
+      {
+        c2_hat = 0.01;
+      }
+      mcts_solver.setConstraints({c1_hat, c2_hat});
+      //mcts_solver.updateConstraints(current_action.actionGoal(), next_decision);
+    }
+
+
     // calculate rewards and costs and add them to the totals
     if (current_action.actionType() == Action::OBSERVE)
     {
-      r += RewardsAndCosts::reward_recognition(trajectory.getPose(current_time), default_human_dims, waypoint) *
-           duration;
-      c1 += RewardsAndCosts::cost_collision(trajectory.getPose(current_time), default_human_dims, waypoint) * duration;
-      c2 += RewardsAndCosts::cost_intrusion(trajectory.getPose(current_time), waypoint) * duration;
+      r += r0;
+      c1 += c1_0;
+      c2 += c2_0;
     }
+
+    std::cout << "Time: " << current_time << "\tReward: " << r << ", C1: " << c1 << ", C2: " << c2 << std::endl;
   }
 
   // update fake execution time
@@ -162,8 +195,9 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
   vector<double> weights{0.333333, 0.333333, 0.333333};
-  TestExecutor te(150, 1.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights);
+//  TestExecutor te(150, 1.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights);
 //  TestExecutor te(150, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
+  TestExecutor te(150, 1.0, TestExecutor::MCTS, SMDPFunctions::LINEARIZED_COST, weights);
 
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;
