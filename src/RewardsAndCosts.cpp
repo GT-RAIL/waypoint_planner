@@ -66,9 +66,12 @@ double RewardsAndCosts::reward_recognition(geometry_msgs::Pose h, geometry_msgs:
   keypoints.clear();
 
   // change these values to change the number of points checked
-  int x_disc = 5;
-  int y_disc = 4;
-  int z_disc = 10;
+//  int x_disc = 5;
+//  int y_disc = 4;
+//  int z_disc = 10;
+  int x_disc = 3;
+  int y_disc = 2;
+  int z_disc = 6;
 
   float min_x = -h_dims.x*0.45;
   float max_x = -min_x;

@@ -10,10 +10,10 @@ const uint8_t TestExecutor::MCTS = 3;
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights) :
     solver(horizon, step, mode, "iss_trajectory.yaml", "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
     lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),    // TODO: parameters here for optional values
-    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 180.0,
+    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
         static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
-    mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 180.0,
-        static_cast<size_t>(horizon/step), 2.0),
+    mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 5.0,
+        60.0, 2.0, 6),
     current_action(Action::OBSERVE),
     pnh("~")
 {
@@ -103,7 +103,8 @@ bool TestExecutor::run(double sim_step)
     }
     else if (approach == MCTS)
     {
-      current_action = mcts_solver.search(waypoint, current_time);
+      //current_action = mcts_solver.search(waypoint, current_time);
+      current_action = mcts_reward_solver.search(waypoint, current_time);
     }
 
     geometry_msgs::Point goal;
@@ -155,7 +156,16 @@ bool TestExecutor::run(double sim_step)
       {
         c2_hat = 0.01;
       }
-      mcts_solver.setConstraints({c1_hat, c2_hat});
+
+      //time-scaling for non-full-depth searches
+      double time_scaling = 60.0 / (time_horizon - current_time);
+      if (time_scaling > 1.0)
+      {
+        time_scaling = 1.0;
+      }
+
+      //mcts_solver.setConstraints({c1_hat, c2_hat});
+      mcts_reward_solver.setConstraints({time_scaling*c1_hat, time_scaling*c2_hat});
       //mcts_solver.updateConstraints(current_action.actionGoal(), next_decision);
     }
 

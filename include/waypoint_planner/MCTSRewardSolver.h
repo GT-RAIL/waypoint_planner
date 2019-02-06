@@ -1,9 +1,14 @@
 #ifndef WAYPOINT_PLANNER_MCTS_REWARD_SOLVER_H_
 #define WAYPOINT_PLANNER_MCTS_REWARD_SOLVER_H_
 
+#include <chrono>
 #include <iostream>
+#include <mutex>
+#include <random>
+#include <thread>
 
 #include <boost/functional/hash.hpp>
+#include <boost/range/adaptor/map.hpp>
 
 #include <geometry_msgs/Vector3.h>
 #include <ros/package.h>
@@ -21,7 +26,8 @@ class MCTSRewardSolver
 {
 public:
     MCTSRewardSolver(double horizon, double step, std::string trajectory_file_name,
-      std::string waypoint_file_name, std::vector<double> constraints, double timeout_sec=10.0, size_t max_time_step_search_depth=150, double exploration_constant=1.0);
+      std::string waypoint_file_name, std::vector<double> constraints, double timeout_sec=10.0,
+      size_t max_time_step_search_depth=150, double exploration_constant=1.0, int num_threads = 1);
 
   Action search(geometry_msgs::Point w, double t);
 
@@ -40,6 +46,8 @@ public:
   void setConstraints(std::vector<double> constraints);
 
 private:
+  static const uint64_t XORSHIFT_MAX;
+
   std::vector<geometry_msgs::Point> waypoints;
   std::vector<StateWithTime> states;
   std::vector<Action> actions;
@@ -75,9 +83,22 @@ private:
   std::map<size_t, double> QR_sa;
   std::vector< std::map<size_t, double> > QC_sa;
 
+  // random number generators
+//  std::mt19937 generator;
+//  std::uniform_real_distribution<double> uniform_dist;
+//  std::bernoulli_distribution bernoulli_dist;
+  uint64_t xorshift_state;
+
+  // multithreading
+  std::mutex rand_mutex;
+  std::mutex lookup_mutex;
+  int num_threads;
+
   std::vector<double> simulate(StateWithTime s);
 
-  size_t greedyPolicy(StateWithTime s, double kappa, bool constrained);
+  size_t greedyPolicy(StateWithTime s);
+
+  size_t selectAction(StateWithTime s, double kappa);
 
   StateWithTime simulate_action(StateWithTime s, Action a, std::vector<double> &result_costs);
 
@@ -98,6 +119,8 @@ private:
   size_t waypointToIndex(geometry_msgs::Point w);
 
   size_t waypointHash(geometry_msgs::Point w);
+
+  uint64_t xorshift64();
 };
 
 #endif  // WAYPOINT_PLANNER_MCTS_REWARD_SOLVER_H_
