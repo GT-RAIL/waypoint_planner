@@ -19,8 +19,8 @@ public:
     static const uint8_t LP_LOAD;
     static const uint8_t MCTS;
 
-    TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode=SMDPFunctions::LINEARIZED_COST,
-        std::vector<double> weights = {});
+    TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode,
+        std::vector<double> weights, size_t search_depth);
 
     bool run(double sim_step);
 
@@ -50,6 +50,8 @@ private:
   double r;
   double c1;
   double c2;
+
+  double search_depth_time;
 
   Action current_action;
   HumanTrajectory trajectory;

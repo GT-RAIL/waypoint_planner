@@ -7,13 +7,14 @@ const uint8_t TestExecutor::LP_SOLVE = 1;
 const uint8_t TestExecutor::LP_LOAD = 2;
 const uint8_t TestExecutor::MCTS = 3;
 
-TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights) :
+TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
+    size_t search_depth) :
     solver(horizon, step, mode, "iss_trajectory.yaml", "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
     lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),    // TODO: parameters here for optional values
     mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
         static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
     mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 5.0,
-        60.0, 2.0, 6),
+        search_depth, 2.0, 6),
     current_action(Action::OBSERVE),
     pnh("~")
 {
@@ -52,6 +53,7 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   current_time = 0;
   next_decision = 0;
   time_step = step;
+  search_depth_time = search_depth*time_step;
 
   // TODO: better waypoint initialization
   waypoint.x = 11.39;
@@ -158,7 +160,7 @@ bool TestExecutor::run(double sim_step)
       }
 
       //time-scaling for non-full-depth searches
-      double time_scaling = 60.0 / (time_horizon - current_time);
+      double time_scaling = search_depth_time / (time_horizon - current_time);
       if (time_scaling > 1.0)
       {
         time_scaling = 1.0;
@@ -207,7 +209,7 @@ int main(int argc, char **argv)
   vector<double> weights{0.333333, 0.333333, 0.333333};
 //  TestExecutor te(150, 1.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights);
 //  TestExecutor te(150, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
-  TestExecutor te(150, 1.0, TestExecutor::MCTS, SMDPFunctions::LINEARIZED_COST, weights);
+  TestExecutor te(150, 1.0, TestExecutor::MCTS, SMDPFunctions::LINEARIZED_COST, weights, 60);
 
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;
