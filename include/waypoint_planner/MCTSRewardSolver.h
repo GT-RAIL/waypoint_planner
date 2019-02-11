@@ -17,6 +17,7 @@
 #include "waypoint_planner/Action.h"
 #include "waypoint_planner/EnvironmentSetup.h"
 #include "waypoint_planner/HumanTrajectory.h"
+#include "waypoint_planner/PerchState.h"
 #include "waypoint_planner/RewardsAndCosts.h"
 #include "waypoint_planner/SMDPFunctions.h"
 #include "waypoint_planner/State.h"
@@ -29,9 +30,9 @@ public:
       std::string waypoint_file_name, std::vector<double> constraints, double timeout_sec=10.0,
       size_t max_time_step_search_depth=150, double exploration_constant=1.0, int num_threads = 1);
 
-  Action search(geometry_msgs::Point w, double t);
+  Action search(PerchState s, double t);
 
-  Action search(size_t waypoint_index, size_t time_step);
+  Action search(size_t state_index, size_t time_step);
 
   Action search(StateWithTime s0);
 
@@ -39,9 +40,9 @@ public:
 
   void loadWaypoints(std::string file_name);
 
-  Action getAction(geometry_msgs::Point s, double t);
+  Action getAction(PerchState s, double t);
 
-  Action getAction(geometry_msgs::Point s, size_t t);
+  Action getAction(PerchState s, size_t t);
 
   void setConstraints(std::vector<double> constraints);
 
@@ -49,11 +50,12 @@ private:
   static const uint64_t XORSHIFT_MAX;
 
   std::vector<geometry_msgs::Point> waypoints;
+  std::vector<PerchState> perch_states;
   std::vector<StateWithTime> states;
   std::vector<Action> actions;
 
   boost::hash< std::vector<double> > hasher;
-  std::map<double, size_t> waypoint_index_map;
+  std::map<double, size_t> state_index_map;
 
   std::vector< std::vector< std::vector<size_t> > > index_map;  // index_map[state_id][time_step][action_id]=i for ys[i]
   size_t num_variables;
@@ -104,11 +106,11 @@ private:
 
   size_t uniformSelect(std::vector<size_t> actions);
 
-  size_t getIndexSA(size_t waypoint_id, size_t t, size_t action_id);
+  size_t getIndexSA(size_t perch_state_id, size_t t, size_t action_id);
 
   size_t getIndexSA(size_t state_id, size_t action_id);  // state_id: index in states vector (s(t))
 
-  size_t getIndexS(size_t waypoint_id, size_t t);
+  size_t getIndexS(size_t perch_state_id, size_t t);
 
   size_t getIndexS(StateWithTime s);
 
@@ -116,9 +118,9 @@ private:
 
   bool isValidAction(size_t waypoint_id, size_t action_id);
 
-  size_t waypointToIndex(geometry_msgs::Point w);
+  size_t perchStateToIndex(PerchState s);
 
-  size_t waypointHash(geometry_msgs::Point w);
+  size_t stateHash(PerchState s);
 
   uint64_t xorshift64();
 };

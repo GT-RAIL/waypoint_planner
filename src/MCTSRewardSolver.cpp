@@ -39,11 +39,18 @@ MCTSRewardSolver::MCTSRewardSolver(double horizon, double step, string trajector
   SMDPFunctions::initializeActions(waypoints, actions);
   cout << "Initialized " << actions.size() << " actions." << endl;
 
-  // initialize list of states, waypoint hashes
-  for (size_t i = 0; i < waypoints.size(); i ++)
+  // initialize list of states
+  for (auto waypoint : waypoints)
   {
-    size_t w_hash = waypointHash(waypoints[i]);
-    waypoint_index_map[w_hash] = i;
+    perch_states.emplace_back(PerchState(waypoint, false));
+    perch_states.emplace_back(PerchState(waypoint, true));
+  }
+
+  // initialize list of states, waypoint hashes
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    size_t s_hash = stateHash(perch_states[i]);
+    state_index_map[s_hash] = i;
     for (size_t j = 0; j <= t_end; j++)
     {
       states.emplace_back(StateWithTime(i, j));
@@ -58,8 +65,8 @@ MCTSRewardSolver::MCTSRewardSolver(double horizon, double step, string trajector
   QC_sa.resize(num_costs);
 
   num_variables = 0;
-  index_map.resize(waypoints.size());
-  for (size_t i = 0; i < waypoints.size(); i ++)
+  index_map.resize(perch_states.size());
+  for (size_t i = 0; i < perch_states.size(); i ++)
   {
     index_map[i].resize(t_end + 1);
     for (size_t j = 0; j <= t_end; j ++)
@@ -110,14 +117,14 @@ uint64_t MCTSRewardSolver::xorshift64()
   return x;
 }
 
-Action MCTSRewardSolver::search(geometry_msgs::Point w, double t)
+Action MCTSRewardSolver::search(PerchState s, double t)
 {
-  return search(waypointToIndex(w), static_cast<size_t>(t / time_step));
+  return search(perchStateToIndex(s), static_cast<size_t>(t / time_step));
 }
 
-Action MCTSRewardSolver::search(size_t waypoint_index, size_t time_step)
+Action MCTSRewardSolver::search(size_t state_index, size_t time_step)
 {
-  return search(StateWithTime(waypoint_index, time_step));
+  return search(StateWithTime(state_index, time_step));
 }
 
 Action MCTSRewardSolver::search(StateWithTime s0)
@@ -164,9 +171,9 @@ Action MCTSRewardSolver::search(StateWithTime s0)
   cout << "\tExpected results: " << endl;
   for (size_t i = 0; i < actions.size(); i ++)
   {
-    if (isValidAction(s0.waypoint_id, i))
+    if (isValidAction(s0.state_id, i))
     {
-      size_t sa_index = getIndexSA(s0.waypoint_id, s0.time_index, i);
+      size_t sa_index = getIndexSA(s0.state_id, s0.time_index, i);
       cout << "\tAction " << i << ": QR(s,a)=" << QR_sa[sa_index] << ", QC0(s,a)=" << QC_sa[0][sa_index] << ", QC1(s,a)=" << QC_sa[1][sa_index] << "; N(s,a)=" << N_sa[sa_index] << endl;
     }
   }
@@ -227,7 +234,7 @@ vector<double> MCTSRewardSolver::simulate(StateWithTime s)
     total_costs[i] += costs_to_go[i];
   }
 
-  size_t sa_index = getIndexSA(s.waypoint_id, s.time_index, a_id);
+  size_t sa_index = getIndexSA(s.state_id, s.time_index, a_id);
   lookup_mutex.lock();
   N_s[s_index] += 1;
   N_sa[sa_index] += 1;
@@ -270,7 +277,7 @@ size_t MCTSRewardSolver::greedyPolicy(StateWithTime s)
 //      std::uniform_int_distribution<size_t> dist(0, actions.size() - 1);
 //      a_id = dist(generator);
 //    }
-    while (!isValidAction(s.waypoint_id, a_id))
+    while (!isValidAction(s.state_id, a_id))
     {
       // if an invalid action was picked randomly, arbitrarily resolve to previous action (observe (id:0) always valid)
       a_id --;
@@ -284,9 +291,9 @@ size_t MCTSRewardSolver::greedyPolicy(StateWithTime s)
   double best_q = std::numeric_limits<double>::lowest();
   for (size_t i = 0; i < actions.size(); i ++)
   {
-    if (isValidAction(s.waypoint_id, i))
+    if (isValidAction(s.state_id, i))
     {
-      size_t sa_index = getIndexSA(s.waypoint_id, s.time_index, i);
+      size_t sa_index = getIndexSA(s.state_id, s.time_index, i);
 
       double q = QR_sa[sa_index];
 
@@ -357,7 +364,7 @@ size_t MCTSRewardSolver::greedyPolicy(StateWithTime s)
 //      std::uniform_int_distribution<size_t> dist(0, actions.size() - 1);
 //      best_action = dist(generator);
 //    }
-    while (!isValidAction(s.waypoint_id, best_action))
+    while (!isValidAction(s.state_id, best_action))
     {
       // if an invalid action was picked randomly, arbitrarily resolve to previous action (observe (id:0) always valid)
       best_action --;
@@ -413,9 +420,9 @@ size_t MCTSRewardSolver::selectAction(StateWithTime s, double kappa)
   double best_q_constrained = std::numeric_limits<double>::lowest();
   for (size_t i = 0; i < actions.size(); i ++)
   {
-    if (isValidAction(s.waypoint_id, i))
+    if (isValidAction(s.state_id, i))
     {
-      size_t sa_index = getIndexSA(s.waypoint_id, s.time_index, i);
+      size_t sa_index = getIndexSA(s.state_id, s.time_index, i);
 
       double q = QR_sa[sa_index];
 
@@ -570,12 +577,12 @@ StateWithTime MCTSRewardSolver::simulate_action(StateWithTime s, Action a, vecto
   }
   else
   {
-    goal = waypoints[s.waypoint_id];
+    goal = perch_states[s.state_id].waypoint;
   }
 
   vector<double> durations;
   vector<double> probabilities;
-  a.duration(waypoints[s.waypoint_id], goal, durations, probabilities);
+  a.duration(perch_states[s.state_id].waypoint, goal, durations, probabilities);
 //  double n = uniform_dist(generator);
   double n = static_cast<double>(xorshift64())/XORSHIFT_MAX;
   double duration = durations[durations.size() - 1];
@@ -590,42 +597,61 @@ StateWithTime MCTSRewardSolver::simulate_action(StateWithTime s, Action a, vecto
     }
   }
 
+  //TODO: power cost
   // calculate rewards and costs and add them to the totals
   if (a.actionType() == Action::OBSERVE)
   {
     result_costs[0] = RewardsAndCosts::reward_recognition(trajectory.getPose(s.time_index * time_step),
-        default_human_dims, waypoints[s.waypoint_id])*duration;
+        default_human_dims, perch_states[s.state_id].waypoint)*duration;
     result_costs[1] = RewardsAndCosts::cost_collision(trajectory.getPose(s.time_index * time_step), default_human_dims,
-        waypoints[s.waypoint_id])*duration;
+                                                      perch_states[s.state_id].waypoint)*duration;
     result_costs[2] = RewardsAndCosts::cost_intrusion(trajectory.getPose(s.time_index * time_step),
-        waypoints[s.waypoint_id])*duration;
+                                                      perch_states[s.state_id].waypoint)*duration;
+  }
+  else if (a.actionType() == Action::PERCH || a.actionType() == Action::UNPERCH)
+  {
+    result_costs[1] = RewardsAndCosts::cost_collision(trajectory.getPose(s.time_index * time_step), default_human_dims,
+                                                      perch_states[s.state_id].waypoint)*duration;
+    result_costs[2] = RewardsAndCosts::cost_intrusion(trajectory.getPose(s.time_index * time_step),
+                                                      perch_states[s.state_id].waypoint)*duration;
   }
 
   if (a.actionType() == Action::MOVE)
   {
-    return StateWithTime(waypointToIndex(goal), static_cast<size_t>(ceil(s.time_index + duration / time_step)));
+    return StateWithTime(perchStateToIndex(PerchState(goal, false)),
+        static_cast<size_t>(ceil(s.time_index + duration / time_step)));
   }
-  return StateWithTime(s.waypoint_id, static_cast<size_t>(ceil(s.time_index + duration / time_step)));
+  else if (a.actionType() == Action::PERCH)
+  {
+    return StateWithTime(perchStateToIndex(PerchState(goal, true)),
+        static_cast<size_t>(ceil(s.time_index + duration / time_step)));
+  }
+  else if (a.actionType() == Action::UNPERCH)
+  {
+    return StateWithTime(perchStateToIndex(PerchState(goal, false)),
+                         static_cast<size_t>(ceil(s.time_index + duration / time_step)));
+  }
+  return StateWithTime(s.state_id, static_cast<size_t>(ceil(s.time_index + duration / time_step)));
 }
 
-size_t MCTSRewardSolver::getIndexSA(size_t waypoint_id, size_t t, size_t action_id)
+size_t MCTSRewardSolver::getIndexSA(size_t perch_state_id, size_t t, size_t action_id)
 {
-  return index_map[waypoint_id][t][action_id];
+  return index_map[perch_state_id][t][action_id];
 }
 
 size_t MCTSRewardSolver::getIndexSA(size_t state_id, size_t action_id)
 {
-  return getIndexSA(states[state_id].waypoint_id, states[state_id].time_index, action_id);
+  return getIndexSA(states[state_id].state_id, states[state_id].time_index, action_id);
 }
 
 size_t MCTSRewardSolver::getIndexS(StateWithTime s)
 {
-  return getIndexS(s.waypoint_id, s.time_index);
+  return getIndexS(s.state_id, s.time_index);
 }
 
-size_t MCTSRewardSolver::getIndexS(size_t waypoint_id, size_t t)
+size_t MCTSRewardSolver::getIndexS(size_t perch_state_id, size_t t)
 {
-  return waypoint_id*(t_end + 1) + t;
+  return perch_state_id*(t_end + 1) + t;
 }
 
 void MCTSRewardSolver::loadTrajectory(std::string file_name)
@@ -641,42 +667,40 @@ void MCTSRewardSolver::loadWaypoints(string file_name)
   EnvironmentSetup::readWaypoints(waypoint_file_path, waypoints);
 }
 
-Action MCTSRewardSolver::getAction(geometry_msgs::Point s, double t)
+Action MCTSRewardSolver::getAction(PerchState s, double t)
 {
   return getAction(s, static_cast<size_t>(t / time_step));
 }
 
-Action MCTSRewardSolver::getAction(geometry_msgs::Point s, size_t t)
+Action MCTSRewardSolver::getAction(PerchState s, size_t t)
 {
-  return actions[greedyPolicy(StateWithTime(waypointToIndex(s), t))];
+  return actions[greedyPolicy(StateWithTime(perchStateToIndex(s), t))];
 }
 
-size_t MCTSRewardSolver::waypointToIndex(geometry_msgs::Point w)
+size_t MCTSRewardSolver::perchStateToIndex(PerchState s)
 {
-  size_t h = waypointHash(w);
-  if (waypoint_index_map.count(h) == 1)
+  size_t h = stateHash(s);
+  if (state_index_map.count(h) == 1)
   {
-    return waypoint_index_map[h];
+    return state_index_map[h];
   }
-  return waypoints.size();  // error case, waypoint not found in list
+  return perch_states.size();  // error case, perch_state not found in list
 }
 
-size_t MCTSRewardSolver::waypointHash(geometry_msgs::Point w)
+size_t MCTSRewardSolver::stateHash(PerchState s)
 {
-  return hasher({w.x, w.y, w.z});
+  return hasher({s.waypoint.x, s.waypoint.y, s.waypoint.z, static_cast<double>(s.perched)});
 }
 
 double MCTSRewardSolver::reward(size_t state_id, size_t action_id, uint8_t mode)
 {
-  return SMDPFunctions::reward(State(waypoints[states[state_id].waypoint_id],
+  return SMDPFunctions::reward(State(perch_states[states[state_id].state_id].waypoint,
+                                     perch_states[states[state_id].state_id].perched,
                                      trajectory.getPose(states[state_id].time_index*time_step)),
                                actions[action_id], mode);
 }
 
-bool MCTSRewardSolver::isValidAction(size_t waypoint_id, size_t action_id)
+bool MCTSRewardSolver::isValidAction(size_t state_id, size_t action_id)
 {
-  return !(actions[action_id].actionType() == Action::MOVE
-    && waypoints[waypoint_id].x == actions[action_id].actionGoal().x
-    && waypoints[waypoint_id].y == actions[action_id].actionGoal().y
-    && waypoints[waypoint_id].z == actions[action_id].actionGoal().z);
+  return SMDPFunctions::isValidAction(perch_states[state_id], actions[action_id]);
 }

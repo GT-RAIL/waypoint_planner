@@ -24,15 +24,16 @@ public:
 
   void backwardsInduction();
 
-  Action getAction(geometry_msgs::Point s, double t);
+  Action getAction(PerchState s, double t);
 
-  Action getAction(geometry_msgs::Point s, size_t t);
+  Action getAction(PerchState s, size_t t);
 
 private:
   uint8_t mode;
   std::vector<double> linearization_weights;
 
   std::vector<geometry_msgs::Point> waypoints;
+  std::vector<PerchState> perch_states;
   std::vector<Action> actions;
 
   HumanTrajectory trajectory;
@@ -46,6 +47,8 @@ private:
   geometry_msgs::Vector3 default_human_dims;
 
   size_t waypointToIndex(geometry_msgs::Point w);
+
+  size_t perchStateToIndex(PerchState s);
 };
 
 #endif  // WAYPOINT_PLANNER_SMDP_SOLVER_H_

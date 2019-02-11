@@ -123,8 +123,9 @@ add_executable(test_executor
   src/RewardsAndCosts.cpp
   src/SMDPFunctions.cpp
   src/StateWithTime.cpp
-  src/MCTSSolver.cpp
+#  src/MCTSSolver.cpp
   src/MCTSRewardSolver.cpp
+  src/PerchState.cpp
 )
 add_dependencies(
   test_executor

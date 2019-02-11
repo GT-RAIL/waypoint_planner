@@ -11,8 +11,8 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
     size_t search_depth) :
     solver(horizon, step, mode, "iss_trajectory.yaml", "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
     lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),    // TODO: parameters here for optional values
-    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
-        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
+//    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
+//        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
     mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 5.0,
         search_depth, 2.0, 6),
     current_action(Action::OBSERVE),
@@ -55,10 +55,11 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   time_step = step;
   search_depth_time = search_depth*time_step;
 
-  // TODO: better waypoint initialization
-  waypoint.x = 11.39;
-  waypoint.y = -10.12;
-  waypoint.z = 4.45;
+  // TODO: better state initialization
+  state.waypoint.x = 11.39;
+  state.waypoint.y = -10.12;
+  state.waypoint.z = 4.45;
+  state.perched = false;
 
   r = 0;
   c1 = 0;
@@ -68,7 +69,7 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   human_sim_time_publisher = n.advertise<std_msgs::Float32>("human_simulator/time_update", 1, this);
 
   robot_marker.header.frame_id = "world";
-  robot_marker.pose.position = waypoint;
+  robot_marker.pose.position = state.waypoint;
   robot_marker.pose.orientation.w = 1.0;
   robot_marker.action = visualization_msgs::Marker::ADD;
   robot_marker.ns = "test_robot";
@@ -90,23 +91,37 @@ bool TestExecutor::run(double sim_step)
     if (current_action.actionType() == Action::MOVE)
     {
       ROS_INFO("Move action complete.");
-      waypoint = current_action.actionGoal();
-      robot_marker.pose.position = waypoint;
+      state.waypoint = current_action.actionGoal();
+      robot_marker.pose.position = state.waypoint;
+      robot_marker.color.a = 1.0;
+    }
+    else if (current_action.actionType() == Action::PERCH)
+    {
+      state.perched = true;
+      robot_marker.color.r = 0.0;
+      robot_marker.color.g = 1.0;
+      robot_marker.color.a = 1.0;
+    }
+    else if (current_action.actionType() == Action::UNPERCH)
+    {
+      state.perched = false;
+      robot_marker.color.r = 1.0;
+      robot_marker.color.g = 0.0;
       robot_marker.color.a = 1.0;
     }
 
     if (approach == SMDP)
     {
-      current_action = solver.getAction(waypoint, current_time);
+      current_action = solver.getAction(state, current_time);
     }
     else if (approach == LP_SOLVE || approach == LP_LOAD)
     {
-      current_action = lp_solver.getAction(waypoint, current_time);
+      current_action = lp_solver.getAction(state, current_time);
     }
     else if (approach == MCTS)
     {
       //current_action = mcts_solver.search(waypoint, current_time);
-      current_action = mcts_reward_solver.search(waypoint, current_time);
+      current_action = mcts_reward_solver.search(state, current_time);
     }
 
     geometry_msgs::Point goal;
@@ -116,16 +131,28 @@ bool TestExecutor::run(double sim_step)
       goal = current_action.actionGoal();
       robot_marker.color.a = 0.5;
     }
+    else if (current_action.actionType() == Action::PERCH)
+    {
+      ROS_INFO("Starting perch action.");
+      goal = state.waypoint;
+      robot_marker.color.a = 0.5;
+    }
+    else if (current_action.actionType() == Action::UNPERCH)
+    {
+      ROS_INFO("Starting unperch action.");
+      goal = state.waypoint;
+      robot_marker.color.a = 0.5;
+    }
     else
     {
       ROS_INFO("Observing.");
-      goal = waypoint;
+      goal = state.waypoint;
     }
 
     // determine a (fake) execution time
     vector<double> durations;
     vector<double> probabilities;
-    current_action.duration(waypoint, goal, durations, probabilities);
+    current_action.duration(state.waypoint, goal, durations, probabilities);
     double n = static_cast<double>(rand())/RAND_MAX;
     double duration = durations[0];
     double p = 0;
@@ -141,10 +168,11 @@ bool TestExecutor::run(double sim_step)
     next_decision = current_time + duration;
     ROS_INFO("Action duration: %f", duration);
 
-    double r0 = RewardsAndCosts::reward_recognition(trajectory.getPose(current_time), default_human_dims, waypoint) *
-                duration;
-    double c1_0 = RewardsAndCosts::cost_collision(trajectory.getPose(current_time), default_human_dims, waypoint) * duration;
-    double c2_0 = RewardsAndCosts::cost_intrusion(trajectory.getPose(current_time), waypoint) * duration;
+    double r0 = RewardsAndCosts::reward_recognition(trajectory.getPose(current_time),
+        default_human_dims, state.waypoint)*duration;
+    double c1_0 = RewardsAndCosts::cost_collision(trajectory.getPose(current_time), default_human_dims,
+        state.waypoint)*duration;
+    double c2_0 = RewardsAndCosts::cost_intrusion(trajectory.getPose(current_time), state.waypoint)*duration;
     if (approach == MCTS)
     {
       // update cost thresholds
@@ -176,6 +204,11 @@ bool TestExecutor::run(double sim_step)
     if (current_action.actionType() == Action::OBSERVE)
     {
       r += r0;
+      c1 += c1_0;
+      c2 += c2_0;
+    }
+    else if (current_action.actionType() == Action::PERCH || current_action.actionType() == Action::UNPERCH)
+    {
       c1 += c1_0;
       c2 += c2_0;
     }

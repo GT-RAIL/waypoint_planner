@@ -18,7 +18,13 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   cout << "Loaded " << waypoints.size() << " waypoints." << endl;
 
   // initialize list of states
-  for (size_t i = 0; i < waypoints.size(); i ++)
+  for (auto waypoint : waypoints)
+  {
+    perch_states.emplace_back(PerchState(waypoint, false));
+    perch_states.emplace_back(PerchState(waypoint, true));
+  }
+
+  for (size_t i = 0; i < perch_states.size(); i ++)
   {
     for (size_t j = 0; j <= t_end; j ++)
     {
@@ -35,8 +41,8 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   cout << "Constructing (s(t), a) list..." << endl;
 
   num_variables = 0;
-  index_map.resize(waypoints.size());
-  for (size_t i = 0; i < waypoints.size(); i ++)
+  index_map.resize(perch_states.size());
+  for (size_t i = 0; i < perch_states.size(); i ++)
   {
     index_map[i].resize(t_end + 1);
     for (size_t j = 0; j <= t_end; j ++)
@@ -110,7 +116,7 @@ void LPSolver::constructModel(vector<double> total_costs)
     // left side (iterate over actions)
     for (size_t j = 0; j < actions.size(); j ++)
     {
-      if (isValidAction(states[i].waypoint_id, j))
+      if (isValidAction(states[i].state_id, j))
       {
         crow[getIndex(i, j) + 1] = 1;
       }
@@ -127,27 +133,27 @@ void LPSolver::constructModel(vector<double> total_costs)
 
       for (size_t k = 0; k < actions.size(); k ++)
       {
-        if (!isValidAction(states[j].waypoint_id, k))
+        if (!isValidAction(states[j].state_id, k))
         {
           continue;
         }
 
-        vector<geometry_msgs::Point> s_primes;
+        vector<PerchState> s_primes;
         vector<double> transition_ps;
-        SMDPFunctions::transitionModel(waypoints[states[j].waypoint_id], actions[k], s_primes, transition_ps);
+        SMDPFunctions::transitionModel(waypoints[states[j].state_id], actions[k], s_primes, transition_ps);
 
         // iterate through possible waypoint transitions to calculate T(s'|s,a) (without time)
         for (size_t l = 0; l < s_primes.size(); l++)
         {
-          if (states[i].waypoint_id != waypointToIndex(s_primes[l]))
+          if (states[i].state_id != perchStateToIndex(s_primes[l]))
             continue;
 
-          size_t t_waypoint_id = waypointToIndex(s_primes[l]);
-          double t_waypoint_p = transition_ps[l];
+          size_t t_state_id = perchStateToIndex(s_primes[l]);
+          double t_state_p = transition_ps[l];
 
           vector<double> dts;
           vector<double> dt_ps;
-          actions[k].duration(waypoints[states[j].waypoint_id], s_primes[l], dts, dt_ps);
+          actions[k].duration(perch_states[states[j].state_id].waypoint, s_primes[l].waypoint, dts, dt_ps);
           // iterate through possible time durations to fully calculate T(s'|s,a) (with time)
           for (size_t m = 0; m < dts.size(); m ++)
           {
@@ -155,7 +161,7 @@ void LPSolver::constructModel(vector<double> total_costs)
             if (states[i].time_index != t_time_id)
               continue;
 
-            double t_prob = t_waypoint_p*dt_ps[m];
+            double t_prob = t_state_p*dt_ps[m];
             if (t_time_id <= t_end && t_prob > 0)
             {
               crow[getIndex(j, k) + 1] -= t_prob;
@@ -167,7 +173,7 @@ void LPSolver::constructModel(vector<double> total_costs)
     }
 
     // define constant based on initial condition and add constraint
-    // TODO: for now, try only first waypoint as initial state... maybe try all t=0 as initial states in the future
+    // TODO: for now, try only first waypoint unperched as initial state... maybe try all t=0 as initial states in the future
     double b = 0;
     if (i == 0)
     {
@@ -323,7 +329,7 @@ void LPSolver::costConstraint(uint8_t mode, double threshold)
   {
     for (size_t j = 0; j < actions.size(); j ++)
     {
-      if (isValidAction(states[i].waypoint_id, j))
+      if (isValidAction(states[i].state_id, j))
       {
         crow[getIndex(i, j) + 1] = reward(i, j, mode);
       }
@@ -347,15 +353,16 @@ void LPSolver::loadWaypoints(string file_name)
   EnvironmentSetup::readWaypoints(waypoint_file_path, waypoints);
 }
 
-Action LPSolver::getAction(geometry_msgs::Point s, double t)
+Action LPSolver::getAction(PerchState s, double t)
 {
   return getAction(s, static_cast<size_t>(t / time_step));
 }
 
-Action LPSolver::getAction(geometry_msgs::Point s, size_t t)
+Action LPSolver::getAction(PerchState s, size_t t)
 {
-  size_t waypoint_id = waypointToIndex(s);
-  cout << "Getting action for time step " << t << ", waypoint " << waypoint_id << "..." << endl;
+  size_t state_id = perchStateToIndex(s);
+  cout << "Getting action for time step " << t << ", waypoint " << waypointToIndex(s.waypoint)
+       << " (perched: " << s.perched << ")..." << endl;
   size_t best_action_id = 0;
 //  double max_value = 0;
   double sum = 0;
@@ -363,9 +370,9 @@ Action LPSolver::getAction(geometry_msgs::Point s, size_t t)
   vector<double> ps;
   for (size_t i = 0; i < actions.size(); i ++)
   {
-    if (isValidAction(waypoint_id, i))
+    if (isValidAction(state_id, i))
     {
-      double test_value = ys[getIndex(waypoint_id, t, i)];
+      double test_value = ys[getIndex(state_id, t, i)];
       if (test_value > 0)
       {
         sum += test_value;
@@ -418,17 +425,30 @@ Action LPSolver::getAction(geometry_msgs::Point s, size_t t)
   return actions[best_action_id];
 }
 
-size_t LPSolver::getIndex(size_t waypoint_id, size_t t, size_t action_id)
+size_t LPSolver::getIndex(size_t perch_state_id, size_t t, size_t action_id)
 {
-  return index_map[waypoint_id][t][action_id];
+  return index_map[perch_state_id][t][action_id];
 }
 
 size_t LPSolver::getIndex(size_t state_id, size_t action_id)
 {
-  return getIndex(states[state_id].waypoint_id, states[state_id].time_index, action_id);
+  return getIndex(states[state_id].state_id, states[state_id].time_index, action_id);
 }
 
 // TODO: better lookup (hash waypoints to indices maybe?)
+size_t LPSolver::perchStateToIndex(PerchState s)
+{
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    if (perch_states[i].perched == s.perched && perch_states[i].waypoint.x == s.waypoint.x
+        && perch_states[i].waypoint.y == s.waypoint.y && perch_states[i].waypoint.z == s.waypoint.z)
+    {
+      return i;
+    }
+  }
+  return perch_states.size();  // error case, waypoint not found in list
+}
+
 size_t LPSolver::waypointToIndex(geometry_msgs::Point w)
 {
   for (size_t i = 0; i < waypoints.size(); i ++)
@@ -443,15 +463,13 @@ size_t LPSolver::waypointToIndex(geometry_msgs::Point w)
 
 double LPSolver::reward(size_t state_id, size_t action_id, uint8_t mode)
 {
-  return SMDPFunctions::reward(State(waypoints[states[state_id].waypoint_id],
+  return SMDPFunctions::reward(State(perch_states[states[state_id].state_id].waypoint,
+                                     perch_states[states[state_id].state_id].perched,
                                      trajectory.getPose(states[state_id].time_index*time_step)),
                                actions[action_id], mode);
 }
 
-bool LPSolver::isValidAction(size_t waypoint_id, size_t action_id)
+bool LPSolver::isValidAction(size_t state_id, size_t action_id)
 {
-  return !(actions[action_id].actionType() == Action::MOVE
-    && waypoints[waypoint_id].x == actions[action_id].actionGoal().x
-    && waypoints[waypoint_id].y == actions[action_id].actionGoal().y
-    && waypoints[waypoint_id].z == actions[action_id].actionGoal().z);
+  return SMDPFunctions::isValidAction(perch_states[state_id], actions[action_id]);
 }

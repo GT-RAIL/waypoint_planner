@@ -15,9 +15,9 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
   default_human_dims.y = 0.4;
   default_human_dims.z = 1.4;
 
-  vector<geometry_msgs::Point> s_primes;
+  vector<PerchState> s_primes;
   vector<double> transition_probabilities;
-  transitionModel(s.robotPose(), a, s_primes, transition_probabilities);
+  transitionModel(PerchState(s.robotPose(), s.isPerched()), a, s_primes, transition_probabilities);
 
   double r = 0;
 
@@ -26,7 +26,7 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
     vector<double> durations;
     vector<double> probabilities;
 
-    a.duration(s.robotPose(), s_primes[i], durations, probabilities);
+    a.duration(s.robotPose(), s_primes[i].waypoint, durations, probabilities);
 
     double r2 = 0;
     for (size_t j = 0; j < durations.size(); j++)
@@ -67,21 +67,33 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
   return r;
 }
 
-void SMDPFunctions::transitionModel(geometry_msgs::Point s, Action a, vector<geometry_msgs::Point> &s_primes,
-    vector<double> &probabilities)
+void SMDPFunctions::transitionModel(PerchState s, Action a, vector<PerchState> &s_primes, vector<double> &probabilities)
 {
-  geometry_msgs::Point s_prime;
-  if (a.actionType() == Action::OBSERVE)
+  PerchState s_prime;
+  if (a.actionType() == Action::MOVE)
   {
-    s_prime.x = s.x;
-    s_prime.y = s.y;
-    s_prime.z = s.z;
+    s_prime.waypoint.x = a.actionGoal().x;
+    s_prime.waypoint.y = a.actionGoal().y;
+    s_prime.waypoint.z = a.actionGoal().z;
+    s_prime.perched = false;
   }
   else
   {
-    s_prime.x = a.actionGoal().x;
-    s_prime.y = a.actionGoal().y;
-    s_prime.z = a.actionGoal().z;
+    s_prime.waypoint.x = s.waypoint.x;
+    s_prime.waypoint.y = s.waypoint.y;
+    s_prime.waypoint.z = s.waypoint.z;
+    if (a.actionType() == Action::PERCH)
+    {
+      s_prime.perched = true;
+    }
+    else if (a.actionType() == Action::UNPERCH)
+    {
+      s_prime.perched = false;
+    }
+    else
+    {
+      s_prime.perched = s.perched;
+    }
   }
 
   s_primes.push_back(s_prime);
@@ -100,8 +112,20 @@ void SMDPFunctions::initializeActions(vector<geometry_msgs::Point> waypoints, ve
 {
   actions.clear();
   actions.emplace_back(Action(Action::OBSERVE));
+  actions.emplace_back(Action(Action::PERCH));
+  actions.emplace_back(Action(Action::UNPERCH));
   for (auto& waypoint : waypoints)
   {
     actions.emplace_back(Action(Action::MOVE, waypoint));
   }
+}
+
+bool SMDPFunctions::isValidAction(PerchState s, Action a)
+{
+  return (a.actionType() == Action::PERCH && !s.perched)
+         || (a.actionType() == Action::UNPERCH && s.perched)
+         || (a.actionType() == Action::MOVE && !s.perched
+             && !(s.waypoint.x == a.actionGoal().x
+                  && s.waypoint.y == a.actionGoal().y
+                  && s.waypoint.z == a.actionGoal().z));
 }

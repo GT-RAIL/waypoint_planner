@@ -11,6 +11,7 @@
 #include "waypoint_planner/Action.h"
 #include "waypoint_planner/EnvironmentSetup.h"
 #include "waypoint_planner/HumanTrajectory.h"
+#include "waypoint_planner/PerchState.h"
 #include "waypoint_planner/RewardsAndCosts.h"
 #include "waypoint_planner/SMDPFunctions.h"
 #include "waypoint_planner/State.h"
@@ -32,12 +33,13 @@ public:
 
   void loadModel(std::string file_name);
 
-  Action getAction(geometry_msgs::Point s, double t);
+  Action getAction(PerchState s, double t);
 
-  Action getAction(geometry_msgs::Point s, size_t t);
+  Action getAction(PerchState s, size_t t);
 
 private:
   std::vector<geometry_msgs::Point> waypoints;
+  std::vector<PerchState> perch_states;
   std::vector<StateWithTime> states;
   std::vector<Action> actions;
   std::vector<double> ys;
@@ -59,9 +61,11 @@ private:
 
   geometry_msgs::Vector3 default_human_dims;
 
-  size_t getIndex(size_t waypoint_id, size_t t, size_t action_id);
+  size_t getIndex(size_t perch_state_id, size_t t, size_t action_id);
 
   size_t getIndex(size_t state_id, size_t action_id);
+
+  size_t perchStateToIndex(PerchState s);
 
   size_t waypointToIndex(geometry_msgs::Point w);
 
@@ -69,7 +73,7 @@ private:
 
   void costConstraint(uint8_t mode, double threshold);
 
-  bool isValidAction(size_t waypoint_id, size_t action_id);
+  bool isValidAction(size_t state_id, size_t action_id);
 };
 
 #endif  // WAYPOINT_PLANNER_LP_SOLVER_H_
