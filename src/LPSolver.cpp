@@ -140,7 +140,7 @@ void LPSolver::constructModel(vector<double> total_costs)
 
         vector<PerchState> s_primes;
         vector<double> transition_ps;
-        SMDPFunctions::transitionModel(waypoints[states[j].state_id], actions[k], s_primes, transition_ps);
+        SMDPFunctions::transitionModel(perch_states[states[j].state_id], actions[k], s_primes, transition_ps);
 
         // iterate through possible waypoint transitions to calculate T(s'|s,a) (without time)
         for (size_t l = 0; l < s_primes.size(); l++)
@@ -188,6 +188,8 @@ void LPSolver::constructModel(vector<double> total_costs)
   cout << "Collision constraint added." << endl;
   costConstraint(SMDPFunctions::INTRUSION, this->total_costs[1]);
   cout << "Intrusion constraint added." << endl;
+  costConstraint(SMDPFunctions::POWER, this->total_costs[2]);
+  cout << "Power consumption constraint added." << endl;
 
   set_add_rowmode(lp, FALSE);
 
@@ -267,7 +269,7 @@ void LPSolver::solveModel(double timeout)
   free(lp);
 
   cout << "***********************************************\nnonzero values: " << endl;
-  for (size_t n = 0; n < waypoints.size(); n ++)
+  for (size_t n = 0; n < perch_states.size(); n ++)
   {
     for (size_t i = 0; i < t_end + 1; i++)
     {
@@ -276,7 +278,8 @@ void LPSolver::solveModel(double timeout)
         if (isValidAction(n, j))
         {
           if (ys[getIndex(n, i, j)] > 0.00001)
-            cout << "\tw" << n << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
+            cout << "\tw" << waypointToIndex(perch_states[n].waypoint) << "-" << perch_states[n].perched
+               << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
         }
       }
     }
@@ -298,7 +301,7 @@ void LPSolver::loadModel(string file_name)
     }
     model_file.close();
     cout << "***********************************************\nnonzero values: " << endl;
-    for (size_t n = 0; n < waypoints.size(); n ++)
+    for (size_t n = 0; n < perch_states.size(); n ++)
     {
       for (size_t i = 0; i < t_end + 1; i++)
       {
@@ -307,7 +310,8 @@ void LPSolver::loadModel(string file_name)
           if (isValidAction(n, j))
           {
             if (ys[getIndex(n, i, j)] > 0.00001)
-              cout << "\tw" << n << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
+              cout << "\tw" << waypointToIndex(perch_states[n].waypoint) << "-" << perch_states[n].perched
+                << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
           }
         }
       }
@@ -412,6 +416,14 @@ Action LPSolver::getAction(PerchState s, size_t t)
   string mod;
   if (actions[best_action_id].actionType() == Action::OBSERVE)
     str = "Observe";
+  else if (actions[best_action_id].actionType() == Action::PERCH)
+  {
+    str = "Perch";
+  }
+  else if (actions[best_action_id].actionType() == Action::PERCH)
+  {
+    str = "Unperch";
+  }
   else
   {
     str = "Move";

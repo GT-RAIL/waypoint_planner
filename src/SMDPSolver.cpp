@@ -106,8 +106,11 @@ void SMDPSolver::backwardsInduction()
     }
     else
     {
+      // note: we set perched to true and action to observe because at the final time step, we take no action and
+      // therefore the power consumption cost should be zero
       utility_map[i][t_end] = SMDPFunctions::linearizedCost(trajectory.getPose(t_end * time_step), default_human_dims,
-                                                            perch_states[i].waypoint, linearization_weights);
+                                                            perch_states[i].waypoint, true, Action(Action::OBSERVE),
+                                                            linearization_weights);
     }
   }
 

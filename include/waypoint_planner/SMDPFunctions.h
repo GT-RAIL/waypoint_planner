@@ -25,7 +25,7 @@ public:
       std::vector<double> &probabilities);
 
   static double linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vector3 human_dims, geometry_msgs::Point r,
-      std::vector<double> weights);
+      bool perched, Action a, std::vector<double> weights);
 
   static void initializeActions(std::vector<geometry_msgs::Point> waypoints, std::vector<Action> &actions);
 

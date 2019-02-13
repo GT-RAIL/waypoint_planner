@@ -47,11 +47,11 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
             r2 += probabilities[j] * RewardsAndCosts::cost_intrusion(s.humanPose(), s.robotPose()) * durations[j];
           break;
           case POWER:
-            r2 += probabilities[j] * 0 * durations[j];
+            r2 += probabilities[j] * RewardsAndCosts::cost_power(s.isPerched(), a) * durations[j];
           break;
           case LINEARIZED_COST:
-            r2 += probabilities[j] * linearizedCost(s.humanPose(), default_human_dims, s.robotPose(), weights)
-                * durations[j];
+            r2 += probabilities[j] * linearizedCost(s.humanPose(), default_human_dims, s.robotPose(), s.isPerched(), a,
+                weights) * durations[j];
           break;
         }
       }
@@ -101,11 +101,12 @@ void SMDPFunctions::transitionModel(PerchState s, Action a, vector<PerchState> &
 }
 
 double SMDPFunctions::linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vector3 human_dims, geometry_msgs::Point r,
-    vector<double> weights)
+    bool perched, Action a, vector<double> weights)
 {
   return weights[0]*RewardsAndCosts::reward_recognition(h, human_dims, r)
          + weights[1]*RewardsAndCosts::cost_collision(h, human_dims, r)
-         + weights[2]*RewardsAndCosts::cost_intrusion(h, r);
+         + weights[2]*RewardsAndCosts::cost_intrusion(h, r)
+         + weights[3]*RewardsAndCosts::cost_power(perched, a);
 }
 
 void SMDPFunctions::initializeActions(vector<geometry_msgs::Point> waypoints, vector<Action> &actions)
