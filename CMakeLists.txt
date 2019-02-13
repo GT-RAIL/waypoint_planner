@@ -61,7 +61,7 @@ include_directories(include
 )
 
 add_executable(waypoint_planner
-  src/WaypointPlanner.cpp src/RewardsAndCosts.cpp
+  src/WaypointPlanner.cpp src/RewardsAndCosts.cpp src/Action.cpp
 )
 target_link_libraries(waypoint_planner
   ${catkin_LIBRARIES}
@@ -69,7 +69,7 @@ target_link_libraries(waypoint_planner
 )
 
 add_executable(waypoint_tester
-  src/WaypointTester.cpp src/RewardsAndCosts.cpp src/EnvironmentSetup.cpp src/HumanTrajectory.cpp
+  src/WaypointTester.cpp src/RewardsAndCosts.cpp src/EnvironmentSetup.cpp src/HumanTrajectory.cpp src/Action.cpp
 )
 target_link_libraries(waypoint_tester
   ${catkin_LIBRARIES}

@@ -39,6 +39,7 @@ private:
 
   double c1_hat;
   double c2_hat;
+  double c3_hat;
 
   PerchState state;
   double time_horizon;
@@ -50,6 +51,7 @@ private:
   double r;
   double c1;
   double c2;
+  double c3;
 
   double search_depth_time;
 

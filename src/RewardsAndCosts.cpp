@@ -42,6 +42,33 @@ double RewardsAndCosts::cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Poi
   return exp(-dst);
 }
 
+double RewardsAndCosts::cost_power(bool perched, Action a)
+{
+  if (a.actionType() == Action::OBSERVE)
+  {
+    if (perched)
+    {
+      return 0.0;
+    }
+    else
+    {
+      return 0.5;
+    }
+  }
+  else if (a.actionType() == Action::PERCH)
+  {
+    return 1.0;
+  }
+  else if (a.actionType() == Action::UNPERCH)
+  {
+    return 1.0;
+  }
+  else
+  {
+    return 1.0;
+  }
+}
+
 double RewardsAndCosts::reward_recognition(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims, geometry_msgs::Point r)
 {
   vector<int> temp;

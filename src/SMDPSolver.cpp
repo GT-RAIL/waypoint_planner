@@ -38,9 +38,9 @@ SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string traject
   // default weights
   if (linearization_weights.size() == 0 && this->mode == SMDPFunctions::LINEARIZED_COST)
   {
-    for (size_t i = 0; i < 3; i ++)
+    for (size_t i = 0; i < 4; i ++)
     {
-      linearization_weights.push_back(0.333333);
+      linearization_weights.push_back(0.25);
     }
   }
 
@@ -102,7 +102,7 @@ void SMDPSolver::backwardsInduction()
     }
     else if (mode == SMDPFunctions::POWER)
     {
-      utility_map[i][t_end] = 0;
+      utility_map[i][t_end] = 0;  // no action taken on final step, so this will have no cost
     }
     else
     {
@@ -122,7 +122,7 @@ void SMDPSolver::backwardsInduction()
       double best_u = std::numeric_limits<double>::lowest();
       for (Action a : actions)
       {
-        if (SMDPFunctions::isValidAction(PerchState(s.robotPose(), s.isPerched()), a))
+        if (!SMDPFunctions::isValidAction(PerchState(s.robotPose(), s.isPerched()), a))
         {
           continue;
         }
@@ -150,6 +150,16 @@ void SMDPSolver::backwardsInduction()
             if (t_prime <= t_end)  // make sure we don't exceed the finite horizon
             {
               u2 += dt_probabilities[k]*utility_map[new_state_index][t_prime];
+              // add any action costs (power consumption)
+              if (mode == SMDPFunctions::POWER)
+              {
+                u2 += dt_probabilities[k]*dts[k]*RewardsAndCosts::cost_power(perch_states[i].perched, a);
+              }
+              else if (mode == SMDPFunctions::LINEARIZED_COST)
+              {
+                u2 += linearization_weights[3] * dt_probabilities[k] * dts[k]
+                    * RewardsAndCosts::cost_power(perch_states[i].perched, a);
+              }
             }
           }
           u += transition_probabilities[j]*u2;

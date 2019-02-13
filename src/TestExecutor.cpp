@@ -64,6 +64,7 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   r = 0;
   c1 = 0;
   c2 = 0;
+  c3 = 0;
 
   robot_vis_publisher = pnh.advertise<visualization_msgs::Marker>("test_robot_vis", 1, this);
   human_sim_time_publisher = n.advertise<std_msgs::Float32>("human_simulator/time_update", 1, this);
@@ -173,6 +174,7 @@ bool TestExecutor::run(double sim_step)
     double c1_0 = RewardsAndCosts::cost_collision(trajectory.getPose(current_time), default_human_dims,
         state.waypoint)*duration;
     double c2_0 = RewardsAndCosts::cost_intrusion(trajectory.getPose(current_time), state.waypoint)*duration;
+    double c3_0 = RewardsAndCosts::cost_power(state.perched, current_action);
     if (approach == MCTS)
     {
       // update cost thresholds
@@ -212,6 +214,7 @@ bool TestExecutor::run(double sim_step)
       c1 += c1_0;
       c2 += c2_0;
     }
+    c3 += c3_0*duration;  // this accumulates for every action
 
     std::cout << "Time: " << current_time << "\tReward: " << r << ", C1: " << c1 << ", C2: " << c2 << std::endl;
   }
@@ -234,20 +237,21 @@ void TestExecutor::reportResults()
   std::cout << "Total accumulated reward: " << r << std::endl;
   std::cout << "Total accumulated collision cost: " << c1 << std::endl;
   std::cout << "Total accumulated intrusion cost: " << c2 << std::endl;
+  std::cout << "Total accumulated power cost: " << c3 << std::endl;
 }
 
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
-  vector<double> weights{0.333333, 0.333333, 0.333333};
-//  TestExecutor te(150, 1.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights);
-//  TestExecutor te(150, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
-  TestExecutor te(150, 1.0, TestExecutor::MCTS, SMDPFunctions::LINEARIZED_COST, weights, 60);
+  vector<double> weights{0.25, -0.25, -0.25, -0.125};
+//  TestExecutor te(150, 1.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 150);
+  TestExecutor te(150, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 150);
+//  TestExecutor te(150, 1.0, TestExecutor::MCTS, SMDPFunctions::LINEARIZED_COST, weights, 60);
 
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;
 
-  ros::Rate loop_rate(100000);
+  ros::Rate loop_rate(300);
   while (ros::ok())
   {
     ros::spinOnce();

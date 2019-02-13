@@ -104,8 +104,8 @@ double SMDPFunctions::linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vecto
     vector<double> weights)
 {
   return weights[0]*RewardsAndCosts::reward_recognition(h, human_dims, r)
-         - weights[1]*RewardsAndCosts::cost_collision(h, human_dims, r)
-         - weights[2]*RewardsAndCosts::cost_intrusion(h, r);
+         + weights[1]*RewardsAndCosts::cost_collision(h, human_dims, r)
+         + weights[2]*RewardsAndCosts::cost_intrusion(h, r);
 }
 
 void SMDPFunctions::initializeActions(vector<geometry_msgs::Point> waypoints, vector<Action> &actions)
@@ -127,5 +127,6 @@ bool SMDPFunctions::isValidAction(PerchState s, Action a)
          || (a.actionType() == Action::MOVE && !s.perched
              && !(s.waypoint.x == a.actionGoal().x
                   && s.waypoint.y == a.actionGoal().y
-                  && s.waypoint.z == a.actionGoal().z));
+                  && s.waypoint.z == a.actionGoal().z))
+         || (a.actionType() == Action::OBSERVE);
 }
