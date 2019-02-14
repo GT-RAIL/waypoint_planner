@@ -104,7 +104,7 @@ private:
 
   StateWithTime simulate_action(StateWithTime s, Action a, std::vector<double> &result_costs);
 
-  size_t uniformSelect(std::vector<size_t> actions);
+  size_t uniformSelect(std::vector<size_t> &actions);
 
   size_t getIndexSA(size_t perch_state_id, size_t t, size_t action_id);
 
@@ -114,7 +114,7 @@ private:
 
   size_t getIndexS(StateWithTime s);
 
-  double reward(size_t state_id, size_t action_id, uint8_t mode);
+//  double reward(size_t state_id, size_t action_id, uint8_t mode);
 
   bool isValidAction(size_t waypoint_id, size_t action_id);
 

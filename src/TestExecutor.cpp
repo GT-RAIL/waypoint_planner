@@ -1,6 +1,8 @@
 #include "waypoint_planner/TestExecutor.h"
 
 using std::vector;
+using std::cout;
+using std::endl;
 
 const uint8_t TestExecutor::SMDP = 0;
 const uint8_t TestExecutor::LP_SOLVE = 1;
@@ -13,16 +15,17 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
     lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),    // TODO: parameters here for optional values
 //    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
 //        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
-    mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", weights, 5.0,
-        search_depth, 2.0, 6),
+    mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", weights, 30.0,
+        search_depth, 0.5, 6),
     current_action(Action::OBSERVE),
     pnh("~")
 {
-  if (mode == TestExecutor::MCTS)
+  if (approach == TestExecutor::MCTS)
   {
     c1_hat = weights[0];
     c2_hat = weights[1];
     c3_hat = weights[2];
+    cout << "\tc1_hat: " << c1_hat << ", c2_hat: " << c2_hat << ", c3_hat: " << c3_hat << endl;
   }
 
   srand(time(NULL));
@@ -225,7 +228,8 @@ bool TestExecutor::run(double sim_step)
     }
     c3 += c3_0;  // this accumulates for every action
 
-    std::cout << "Time: " << current_time << "\tReward: " << r << ", C1: " << c1 << ", C2: " << c2 << std::endl;
+    std::cout << "Time: " << current_time << "\tReward: " << r << ", C1: " << c1 << ", C2: " << c2 << ", C3: " << c3
+      << std::endl;
   }
 
   // update fake execution time
@@ -253,9 +257,9 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
   vector<double> weights{0.25, -0.25, -0.25, -0.125};
-  TestExecutor te(150, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, {1.0, 75.0, 25.0}, 150);
+//  TestExecutor te(150, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, {1.0, 75.0, 25.0}, 150);
 //  TestExecutor te(150, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.25, -0.25, -0.125}, 150);
-//  TestExecutor te(150, 1.0, TestExecutor::MCTS, SMDPFunctions::LINEARIZED_COST, {1, 75, 75}, 60);
+  TestExecutor te(150, 1.0, TestExecutor::MCTS, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 30);
 
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;

@@ -174,7 +174,7 @@ Action MCTSRewardSolver::search(StateWithTime s0)
     if (isValidAction(s0.state_id, i))
     {
       size_t sa_index = getIndexSA(s0.state_id, s0.time_index, i);
-      cout << "\tAction " << i << ": QR(s,a)=" << QR_sa[sa_index] << ", QC0(s,a)=" << QC_sa[0][sa_index] << ", QC1(s,a)=" << QC_sa[1][sa_index] << "; N(s,a)=" << N_sa[sa_index] << endl;
+      cout << "\tAction " << i << ": QR(s,a)=" << QR_sa[sa_index] << ", QC0(s,a)=" << QC_sa[0][sa_index] << ", QC1(s,a)=" << QC_sa[1][sa_index] << ", QC2(s,a)=" << QC_sa[2][sa_index]<< "; N(s,a)=" << N_sa[sa_index] << endl;
     }
   }
 
@@ -336,39 +336,64 @@ size_t MCTSRewardSolver::greedyPolicy(StateWithTime s)
     }
   }
 
+  //TODO: temp debug code
+  for (size_t i = 0; i < cost_constraints.size(); i ++)
+  {
+    cout << "Constraint " << i << ": " << cost_constraints[i] << endl;
+  }
+
   // currently select uniformly as an approximation to avoid solving a convex optimization problem
   size_t best_action;
   if (!best_actions.empty())
   {
+    cout << "Selecting a non-constraint-violating action." << endl;
     best_action = uniformSelect(best_actions);
   }
   else
   {
-    best_action = actions.size() - 1;
-//    if (bernoulli_dist(generator))  // take observe with probability 0.5, otherwise select uniformly
-//    if (xorshift64() > 0.5*XORSHIFT_MAX)
-//    {
-    double p = 0.0;
-    double increment = 1.0/actions.size();
-//      double selection = uniform_dist(generator);
-    double selection = static_cast<double>(xorshift64())/XORSHIFT_MAX;
-    for (size_t i = 0; i < actions.size() - 1; i ++)
+    cout << "All actions violated constraints! (selecting by scalarization heuristic)" << endl;
+
+    double maxv = std::numeric_limits<double>::lowest();
+    best_action = 0;
+    for (size_t i = 0; i < actions.size(); i ++)
     {
-      p += increment;
-      if (p > selection)
+      if (isValidAction(s.state_id, i))
       {
-        best_action = i;
-        break;
+        size_t sa_index = getIndexSA(s.state_id, s.time_index, i);
+        double v = QR_sa[sa_index] + 0.5*QC_sa[0][sa_index] + 0.2*QC_sa[1][sa_index] + 0.3*QC_sa[2][sa_index];
+        if (v > maxv)
+        {
+          maxv = v;
+          best_action = i;
+        }
       }
     }
-//      std::uniform_int_distribution<size_t> dist(0, actions.size() - 1);
-//      best_action = dist(generator);
+
+//    best_action = actions.size() - 1;
+////    if (bernoulli_dist(generator))  // take observe with probability 0.5, otherwise select uniformly
+////    if (xorshift64() > 0.5*XORSHIFT_MAX)
+////    {
+//    double p = 0.0;
+//    double increment = 1.0/actions.size();
+////      double selection = uniform_dist(generator);
+//    double selection = static_cast<double>(xorshift64())/XORSHIFT_MAX;
+//    for (size_t i = 0; i < actions.size() - 1; i ++)
+//    {
+//      p += increment;
+//      if (p > selection)
+//      {
+//        best_action = i;
+//        break;
+//      }
 //    }
-    while (!isValidAction(s.state_id, best_action))
-    {
-      // if an invalid action was picked randomly, arbitrarily resolve to previous action (observe (id:0) always valid)
-      best_action --;
-    }
+////      std::uniform_int_distribution<size_t> dist(0, actions.size() - 1);
+////      best_action = dist(generator);
+////    }
+//    while (!isValidAction(s.state_id, best_action))
+//    {
+//      // if an invalid action was picked randomly, arbitrarily resolve to previous action (observe (id:0) always valid)
+//      best_action --;
+//    }
   }
 
   return best_action;
@@ -410,6 +435,8 @@ size_t MCTSRewardSolver::selectAction(StateWithTime s, double kappa)
 //    }
 
 //    return a_id;
+//    if (isValidAction(s_index, 1))
+//      return 1;
     return 0;  // arbitrarily choose observe action, as any unexplored actions will be tried next
   }
   lookup_mutex.unlock();
@@ -438,66 +465,40 @@ size_t MCTSRewardSolver::selectAction(StateWithTime s, double kappa)
         }
       }
 
-      if (q > best_q)
+      bool violates_constraints = false;
+      for (size_t j = 0; j < QC_sa.size(); j++)
       {
-        bool violates_constraints = false;
-        for (size_t j = 0; j < QC_sa.size(); j++)
+        if (QC_sa[j][sa_index] > cost_constraints[j])
         {
-          if (QC_sa[j][sa_index] > cost_constraints[j])
-          {
-            violates_constraints = true;
-            break;
-          }
+          violates_constraints = true;
+          break;
         }
+      }
 
-        if (violates_constraints)
-        {
-          if (q > best_q_constrained)
-          {
-            best_constrained_actions.resize(1);
-            best_constrained_actions[0] = i;
-            best_q_constrained = q;
-          }
-          else if (q == best_q_constrained)
-          {
-            best_constrained_actions.push_back(i);
-          }
-        }
-        else
+      if (violates_constraints)
+      {
+        if (q > best_q)
         {
           best_actions.resize(1);
           best_actions[0] = i;
           best_q = q;
         }
-      }
-      else if (q == best_q)
-      {
-        bool violates_constraints = false;
-        for (size_t j = 0; j < QC_sa.size(); j++)
-        {
-          if (QC_sa[j][sa_index] > cost_constraints[j])
-          {
-            violates_constraints = true;
-            break;
-          }
-        }
-
-        if (violates_constraints)
-        {
-          if (q > best_q_constrained)
-          {
-            best_constrained_actions.resize(1);
-            best_constrained_actions[0] = i;
-            best_q_constrained = q;
-          }
-          else if (q == best_q_constrained)
-          {
-            best_constrained_actions.push_back(i);
-          }
-        }
         else
         {
           best_actions.push_back(i);
+        }
+      }
+      else
+      {
+        if (q > best_q_constrained)
+        {
+          best_constrained_actions.resize(1);
+          best_constrained_actions[0] = i;
+          best_q_constrained = q;
+        }
+        else if (q == best_q_constrained)
+        {
+          best_constrained_actions.push_back(i);
         }
       }
     }
@@ -529,7 +530,7 @@ size_t MCTSRewardSolver::selectAction(StateWithTime s, double kappa)
   return best_action;
 }
 
-size_t MCTSRewardSolver::uniformSelect(vector<size_t> actions)
+size_t MCTSRewardSolver::uniformSelect(vector<size_t> &actions)
 {
   size_t best_action = actions[0];
   if (actions.size() > 1)
@@ -597,7 +598,6 @@ StateWithTime MCTSRewardSolver::simulate_action(StateWithTime s, Action a, vecto
     }
   }
 
-  //TODO: power cost
   // calculate rewards and costs and add them to the totals
   if (a.actionType() == Action::OBSERVE)
   {
@@ -607,6 +607,7 @@ StateWithTime MCTSRewardSolver::simulate_action(StateWithTime s, Action a, vecto
                                                       perch_states[s.state_id].waypoint)*duration;
     result_costs[2] = RewardsAndCosts::cost_intrusion(trajectory.getPose(s.time_index * time_step),
                                                       perch_states[s.state_id].waypoint)*duration;
+    result_costs[3] = RewardsAndCosts::cost_power(perch_states[s.state_id].perched, a)*duration;
   }
   else if (a.actionType() == Action::PERCH || a.actionType() == Action::UNPERCH)
   {
@@ -614,6 +615,11 @@ StateWithTime MCTSRewardSolver::simulate_action(StateWithTime s, Action a, vecto
                                                       perch_states[s.state_id].waypoint)*duration;
     result_costs[2] = RewardsAndCosts::cost_intrusion(trajectory.getPose(s.time_index * time_step),
                                                       perch_states[s.state_id].waypoint)*duration;
+    result_costs[3] = RewardsAndCosts::cost_power(perch_states[s.state_id].perched, a)*duration;
+  }
+  else if (a.actionType() == Action::MOVE)
+  {
+    result_costs[3] = RewardsAndCosts::cost_power(perch_states[s.state_id].perched, a)*duration;
   }
 
   if (a.actionType() == Action::MOVE)
@@ -692,13 +698,13 @@ size_t MCTSRewardSolver::stateHash(PerchState s)
   return hasher({s.waypoint.x, s.waypoint.y, s.waypoint.z, static_cast<double>(s.perched)});
 }
 
-double MCTSRewardSolver::reward(size_t state_id, size_t action_id, uint8_t mode)
-{
-  return SMDPFunctions::reward(State(perch_states[states[state_id].state_id].waypoint,
-                                     perch_states[states[state_id].state_id].perched,
-                                     trajectory.getPose(states[state_id].time_index*time_step)),
-                               actions[action_id], mode);
-}
+//double MCTSRewardSolver::reward(size_t state_id, size_t action_id, uint8_t mode)
+//{
+//  return SMDPFunctions::reward(State(perch_states[states[state_id].state_id].waypoint,
+//                                     perch_states[states[state_id].state_id].perched,
+//                                     trajectory.getPose(states[state_id].time_index*time_step)),
+//                               actions[action_id], mode);
+//}
 
 bool MCTSRewardSolver::isValidAction(size_t state_id, size_t action_id)
 {
