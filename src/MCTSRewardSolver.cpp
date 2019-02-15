@@ -238,11 +238,26 @@ vector<double> MCTSRewardSolver::simulate(StateWithTime s)
   lookup_mutex.lock();
   N_s[s_index] += 1;
   N_sa[sa_index] += 1;
-  QR_sa[sa_index] += (total_costs[0] - QR_sa[sa_index])/N_sa[sa_index];
-  for (size_t i = 0; i < QC_sa.size(); i ++)
-  {
-    QC_sa[i][sa_index] += (total_costs[i + 1] - QC_sa[i][sa_index])/N_sa[sa_index];
-  }
+  //TODO: new testing
+  //TODO: add a constraint-violating set of lookup tables
+  //TODO: explore both an action from the non-constraint-violating stats and from the constraint-violating stats
+//  bool safe = true;
+//  for (size_t i = 0; i < total_costs.size() - 1; i ++)
+//  {
+//    if (total_costs[i + 1] > cost_constraints[i])
+//    {
+//      safe = false;
+//      break;
+//    }
+//  }
+//  if (safe)
+//  {
+    QR_sa[sa_index] += (total_costs[0] - QR_sa[sa_index]) / N_sa[sa_index];
+    for (size_t i = 0; i < QC_sa.size(); i++)
+    {
+      QC_sa[i][sa_index] += (total_costs[i + 1] - QC_sa[i][sa_index]) / N_sa[sa_index];
+    }
+//  }
   lookup_mutex.unlock();
 
   return total_costs;

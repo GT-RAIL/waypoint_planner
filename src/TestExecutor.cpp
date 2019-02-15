@@ -16,7 +16,7 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
 //    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
 //        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
     mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", weights, 30.0,
-        search_depth, 0.5, 6),
+        search_depth, 8, 6),
     current_action(Action::OBSERVE),
     pnh("~")
 {
