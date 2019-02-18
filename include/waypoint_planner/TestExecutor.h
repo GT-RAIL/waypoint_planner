@@ -9,6 +9,7 @@
 #include "waypoint_planner/LPSolver.h"
 //#include "waypoint_planner/MCTSSolver.h"
 #include "waypoint_planner/MCTSRewardSolver.h"
+#include "waypoint_planner/MCTSScalarizedSolver.h"
 #include "waypoint_planner/SMDPSolver.h"
 
 class TestExecutor
@@ -17,7 +18,8 @@ public:
     static const uint8_t SMDP;
     static const uint8_t LP_SOLVE;
     static const uint8_t LP_LOAD;
-    static const uint8_t MCTS;
+    static const uint8_t MCTS_CONSTRAINED;
+    static const uint8_t MCTS_SCALARIZED;
 
     TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode,
         std::vector<double> weights, size_t search_depth);
@@ -36,6 +38,7 @@ private:
   LPSolver lp_solver;
 //  MCTSSolver mcts_solver;
   MCTSRewardSolver mcts_reward_solver;
+  MCTSScalarizedSolver mcts_scalarized_solver;
 
   double c1_hat;
   double c2_hat;

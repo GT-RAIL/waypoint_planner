@@ -44,7 +44,8 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
                   * durations[j];
           break;
           case INTRUSION:
-            r2 += probabilities[j] * RewardsAndCosts::cost_intrusion(s.humanPose(), s.robotPose()) * durations[j];
+            r2 += probabilities[j] * RewardsAndCosts::cost_intrusion(s.humanPose(), s.robotPose(), s.isPerched())
+                * durations[j];
           break;
           case POWER:
             r2 += probabilities[j] * RewardsAndCosts::cost_power(s.isPerched(), a) * durations[j];
@@ -105,7 +106,7 @@ double SMDPFunctions::linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vecto
 {
   return weights[0]*RewardsAndCosts::reward_recognition(h, human_dims, r)
          + weights[1]*RewardsAndCosts::cost_collision(h, human_dims, r)
-         + weights[2]*RewardsAndCosts::cost_intrusion(h, r)
+         + weights[2]*RewardsAndCosts::cost_intrusion(h, r, perched)
          + weights[3]*RewardsAndCosts::cost_power(perched, a);
 }
 

@@ -7,7 +7,8 @@ using std::endl;
 const uint8_t TestExecutor::SMDP = 0;
 const uint8_t TestExecutor::LP_SOLVE = 1;
 const uint8_t TestExecutor::LP_LOAD = 2;
-const uint8_t TestExecutor::MCTS = 3;
+const uint8_t TestExecutor::MCTS_CONSTRAINED = 3;
+const uint8_t TestExecutor::MCTS_SCALARIZED = 4;
 
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
     size_t search_depth) :
@@ -16,11 +17,13 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
 //    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
 //        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
     mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", weights, 30.0,
-        search_depth, 8, 6),
+        search_depth, 2, 6),
+    mcts_scalarized_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", weights, 120.0,
+        search_depth, 10000, 6),
     current_action(Action::OBSERVE),
     pnh("~")
 {
-  if (approach == TestExecutor::MCTS)
+  if (approach == TestExecutor::MCTS_CONSTRAINED)
   {
     c1_hat = weights[0];
     c2_hat = weights[1];
@@ -61,6 +64,18 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   next_decision = 0;
   time_step = step;
   search_depth_time = search_depth*time_step;
+
+  if (this->approach == MCTS_CONSTRAINED)
+  {
+    //time-scaling for non-full-depth searches
+    double time_scaling = search_depth_time / (time_horizon - current_time);
+    if (time_scaling > 1.0)
+    {
+      time_scaling = 1.0;
+    }
+
+    mcts_reward_solver.setConstraints({time_scaling*c1_hat, time_scaling*c2_hat, time_scaling*c3_hat});
+  }
 
   // TODO: better state initialization
   state.waypoint.x = 11.39;
@@ -126,10 +141,14 @@ bool TestExecutor::run(double sim_step)
     {
       current_action = lp_solver.getAction(state, current_time);
     }
-    else if (approach == MCTS)
+    else if (approach == MCTS_CONSTRAINED)
     {
       //current_action = mcts_solver.search(waypoint, current_time);
       current_action = mcts_reward_solver.search(state, current_time);
+    }
+    else if (approach == MCTS_SCALARIZED)
+    {
+      current_action = mcts_scalarized_solver.search(state, current_time);
     }
 
     geometry_msgs::Point goal;
@@ -180,9 +199,9 @@ bool TestExecutor::run(double sim_step)
         default_human_dims, state.waypoint)*duration;
     double c1_0 = RewardsAndCosts::cost_collision(trajectory.getPose(current_time), default_human_dims,
         state.waypoint)*duration;
-    double c2_0 = RewardsAndCosts::cost_intrusion(trajectory.getPose(current_time), state.waypoint)*duration;
+    double c2_0 = RewardsAndCosts::cost_intrusion(trajectory.getPose(current_time), state.waypoint, state.perched)*duration;
     double c3_0 = RewardsAndCosts::cost_power(state.perched, current_action)*duration;
-    if (approach == MCTS)
+    if (approach == MCTS_CONSTRAINED)
     {
       // update cost thresholds
       c1_hat -= c1_0;
@@ -259,7 +278,9 @@ int main(int argc, char **argv)
   vector<double> weights{0.25, -0.25, -0.25, -0.125};
 //  TestExecutor te(150, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, {1.0, 75.0, 25.0}, 150);
 //  TestExecutor te(150, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.25, -0.25, -0.125}, 150);
-  TestExecutor te(150, 1.0, TestExecutor::MCTS, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 30);
+//  TestExecutor te(150, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60);
+  TestExecutor te(150, 1.0, TestExecutor::MCTS_SCALARIZED, SMDPFunctions::LINEARIZED_COST,
+      {0.25, -0.25, -0.25, -0.125}, 30);
 
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;

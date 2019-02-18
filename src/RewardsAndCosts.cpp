@@ -24,7 +24,7 @@ double RewardsAndCosts::cost_collision(geometry_msgs::Pose h, geometry_msgs::Vec
   return exp(-10*dst);
 }
 
-double RewardsAndCosts::cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r)
+double RewardsAndCosts::cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r, bool perched)
 {
   // convert ROS messages to bullet types
   btTransform t_h(btQuaternion(h.orientation.x, h.orientation.y, h.orientation.z, h.orientation.w),
@@ -36,10 +36,17 @@ double RewardsAndCosts::cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Poi
   btVector3 head = t_h*h_point;
 
   // intrusiveness cost as an inverse distance from robot to head
-  // TODO: lower when perched?
   double dst = (r_point - head).length();
 
-  return exp(-dst);
+  // TODO: lower cost when perched?
+  if (perched)
+  {
+    return 0.5*exp(-dst);
+  }
+  else
+  {
+    return exp(-dst);
+  }
 }
 
 double RewardsAndCosts::cost_power(bool perched, Action a)
@@ -48,20 +55,20 @@ double RewardsAndCosts::cost_power(bool perched, Action a)
   {
     if (perched)
     {
-      return 0.0;
+      return 0.125;
     }
     else
     {
-      return 0.5;
+      return 0.25;
     }
   }
   else if (a.actionType() == Action::PERCH)
   {
-    return 1.0;
+    return 0.5;
   }
   else if (a.actionType() == Action::UNPERCH)
   {
-    return 1.0;
+    return 0.5;
   }
   else
   {

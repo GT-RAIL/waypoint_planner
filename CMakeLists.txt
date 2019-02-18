@@ -125,6 +125,7 @@ add_executable(test_executor
   src/StateWithTime.cpp
 #  src/MCTSSolver.cpp
   src/MCTSRewardSolver.cpp
+  src/MCTSScalarizedSolver.cpp
   src/PerchState.cpp
 )
 add_dependencies(

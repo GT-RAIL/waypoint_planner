@@ -25,7 +25,7 @@ public:
   static double cost_collision(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims,
       geometry_msgs::Point r);
 
-  static double cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r);
+  static double cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r, bool perched);
 
   static double cost_power(bool perched, Action a);
 

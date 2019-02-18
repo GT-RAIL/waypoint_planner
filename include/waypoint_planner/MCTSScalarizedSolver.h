@@ -1,5 +1,5 @@
-#ifndef WAYPOINT_PLANNER_MCTS_REWARD_SOLVER_H_
-#define WAYPOINT_PLANNER_MCTS_REWARD_SOLVER_H_
+#ifndef WAYPOINT_PLANNER_MCTS_SCALARIZED_SOLVER_H_
+#define WAYPOINT_PLANNER_MCTS_SCALARIZED_SOLVER_H_
 
 #include <chrono>
 #include <iostream>
@@ -23,11 +23,11 @@
 #include "waypoint_planner/State.h"
 #include "waypoint_planner/StateWithTime.h"
 
-class MCTSRewardSolver
+class MCTSScalarizedSolver
 {
 public:
-    MCTSRewardSolver(double horizon, double step, std::string trajectory_file_name,
-      std::string waypoint_file_name, std::vector<double> constraints, double timeout_sec=10.0,
+    MCTSScalarizedSolver(double horizon, double step, std::string trajectory_file_name,
+      std::string waypoint_file_name, std::vector<double> weights, double timeout_sec=10.0,
       size_t max_time_step_search_depth=150, double exploration_constant=1.0, int num_threads = 1);
 
   Action search(PerchState s, double t);
@@ -44,7 +44,7 @@ public:
 
   Action getAction(PerchState s, size_t t);
 
-  void setConstraints(std::vector<double> constraints);
+  void setWeights(std::vector<double> weights);
 
 private:
   static const uint64_t XORSHIFT_MAX;
@@ -70,8 +70,8 @@ private:
 
   size_t num_costs;
 
-  // Max expected accumulated costs
-  std::vector<double> cost_constraints;
+  // Scalarization function weights
+  std::vector<double> weights;
 
   // UCT parameters
   double exploration_constant;
@@ -81,12 +81,8 @@ private:
 
   // lookup tables for rollouts
   std::map<size_t, double> N_s;
-  std::map<size_t, double> N_nv_sa;  // nv = constraint non-violating
-  std::map<size_t, double> N_v_sa;  // v = constraint violating
-  std::map<size_t, double> QR_nv_sa;
-  std::map<size_t, double> QR_v_sa;
-  std::vector< std::map<size_t, double> > QC_nv_sa;
-  std::vector< std::map<size_t, double> > QC_v_sa;
+  std::map<size_t, double> N_sa;
+  std::map<size_t, double> QR_sa;
 
   // random number generators
 //  std::mt19937 generator;
@@ -99,15 +95,11 @@ private:
   std::mutex lookup_mutex;
   int num_threads;
 
-  bool action_switch;
-
-  std::vector<double> simulate(StateWithTime s, bool constrained);
+  std::vector<double> simulate(StateWithTime s);
 
   size_t greedyPolicy(StateWithTime s);
 
-  size_t selectConstrainedAction(StateWithTime s, double kappa);
-
-  size_t selectUnconstrainedAction(StateWithTime s, double kappa);
+  size_t selectAction(StateWithTime s, double kappa);
 
   StateWithTime simulate_action(StateWithTime s, Action a, std::vector<double> &result_costs);
 
@@ -132,4 +124,4 @@ private:
   uint64_t xorshift64();
 };
 
-#endif  // WAYPOINT_PLANNER_MCTS_REWARD_SOLVER_H_
+#endif  // WAYPOINT_PLANNER_MCTS_SCALARIZED_SOLVER_H_

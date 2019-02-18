@@ -98,7 +98,7 @@ void SMDPSolver::backwardsInduction()
     else if (mode == SMDPFunctions::INTRUSION)
     {
       utility_map[i][t_end] = RewardsAndCosts::cost_intrusion(trajectory.getPose(t_end * time_step),
-          perch_states[i].waypoint);
+          perch_states[i].waypoint, perch_states[i].perched);
     }
     else if (mode == SMDPFunctions::POWER)
     {
