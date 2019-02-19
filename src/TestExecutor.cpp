@@ -3,6 +3,7 @@
 using std::vector;
 using std::cout;
 using std::endl;
+using std::string;
 
 const uint8_t TestExecutor::SMDP = 0;
 const uint8_t TestExecutor::LP_SOLVE = 1;
@@ -11,14 +12,14 @@ const uint8_t TestExecutor::MCTS_CONSTRAINED = 3;
 const uint8_t TestExecutor::MCTS_SCALARIZED = 4;
 
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
-    size_t search_depth) :
-    solver(horizon, step, mode, "pick_place_trajectory.yaml", "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
-    lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),    // TODO: parameters here for optional values
+    size_t search_depth, string trajectory_file) :
+    solver(horizon, step, mode, trajectory_file, "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
+    lp_solver(horizon, step, trajectory_file, "iss_waypoints.csv"),    // TODO: parameters here for optional values
 //    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
 //        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
-    mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", weights, 30.0,
+    mcts_reward_solver(horizon, step, trajectory_file, "iss_waypoints.csv", weights, 30.0,
         search_depth, 2, 6),
-    mcts_scalarized_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints_small.csv", weights, 10.0,
+    mcts_scalarized_solver(horizon, step, trajectory_file, "iss_waypoints_small.csv", weights, 10.0,
         search_depth, 100, 6),
     current_action(Action::OBSERVE),
     pnh("~")
@@ -34,8 +35,16 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   srand(time(NULL));
 
   this->approach = approach;
+  this->mode = mode;
+  this->search_depth = search_depth;
 
-  std::string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/iss_trajectory.yaml";
+  this->weights.resize(weights.size());
+  for (size_t i = 0; i < weights.size(); i ++)
+  {
+    this->weights[i] = weights[i];
+  }
+
+  string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
   trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
 
   default_human_dims.x = 0.5;
@@ -90,6 +99,97 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
 
   robot_vis_publisher = pnh.advertise<visualization_msgs::Marker>("test_robot_vis", 1, this);
   human_sim_time_publisher = n.advertise<std_msgs::Float32>("human_simulator/time_update", 1, this);
+
+  robot_marker.header.frame_id = "world";
+  robot_marker.pose.position = state.waypoint;
+  robot_marker.pose.orientation.w = 1.0;
+  robot_marker.action = visualization_msgs::Marker::ADD;
+  robot_marker.ns = "test_robot";
+  robot_marker.id = 0;
+  robot_marker.type = visualization_msgs::Marker::CUBE;
+  robot_marker.scale.x = 0.25;
+  robot_marker.scale.y = 0.25;
+  robot_marker.scale.z = 0.25;
+  robot_marker.color.r = 1.0;
+  robot_marker.color.g = 0.0;
+  robot_marker.color.b = 1.0;
+  robot_marker.color.a = 1.0;
+}
+
+void TestExecutor::reset(double horizon, std::string trajectory_file)
+{
+  if (approach == TestExecutor::SMDP)
+  {
+    solver.reset(horizon, trajectory_file);
+  }
+  else if (approach == TestExecutor::LP_SOLVE || approach == TestExecutor::LP_LOAD)
+  {
+    lp_solver.reset(horizon, trajectory_file);
+  }
+  else if (approach == TestExecutor::MCTS_CONSTRAINED)
+  {
+    mcts_reward_solver.reset(horizon, trajectory_file, weights);
+  }
+  else if (approach == TestExecutor::MCTS_SCALARIZED)
+  {
+    mcts_scalarized_solver.reset(horizon, trajectory_file);
+  }
+
+  if (approach == TestExecutor::MCTS_CONSTRAINED)
+  {
+    c1_hat = weights[0];
+    c2_hat = weights[1];
+    c3_hat = weights[2];
+    cout << "\tc1_hat: " << c1_hat << ", c2_hat: " << c2_hat << ", c3_hat: " << c3_hat << endl;
+  }
+
+  string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
+  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
+
+  if (this->approach == LP_SOLVE)
+  {
+    lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
+    lp_solver.solveModel(600);  // solver timeout (s) before restarting
+    ROS_INFO("LP model solved.");
+  }
+  else if (this->approach == LP_LOAD)
+  {
+    lp_solver.loadModel("var_results.txt");
+    ROS_INFO("LP model loaded.");
+  }
+  else if (this->approach == SMDP)
+  {
+    solver.backwardsInduction();
+    ROS_INFO("Policy computed.");
+  }
+
+  time_horizon = horizon;
+  current_time = 0;
+  next_decision = 0;
+  search_depth_time = search_depth*time_step;
+
+  if (this->approach == MCTS_CONSTRAINED)
+  {
+    //time-scaling for non-full-depth searches
+    double time_scaling = search_depth_time / (time_horizon - current_time);
+    if (time_scaling > 1.0)
+    {
+      time_scaling = 1.0;
+    }
+
+    mcts_reward_solver.setConstraints({time_scaling*c1_hat, time_scaling*c2_hat, time_scaling*c3_hat});
+  }
+
+  // TODO: better state initialization
+  state.waypoint.x = 11.39;
+  state.waypoint.y = -10.12;
+  state.waypoint.z = 4.45;
+  state.perched = false;
+
+  r = 0;
+  c1 = 0;
+  c2 = 0;
+  c3 = 0;
 
   robot_marker.header.frame_id = "world";
   robot_marker.pose.position = state.waypoint;
@@ -276,11 +376,11 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
   vector<double> weights{0.25, -0.25, -0.25, -0.125};
-//  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, {1.0, 75.0, 25.0}, 180);
-  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.25, -0.25, -0.125}, 180);
-//  TestExecutor te(180, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60);
+//  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, {1.0, 75.0, 25.0}, 180, "iss_trajectory.yaml");
+  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.25, -0.25, -0.125}, 180, "iss_trajectory.yaml");
+//  TestExecutor te(180, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60, "iss_trajectory.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_SCALARIZED, SMDPFunctions::LINEARIZED_COST,
-//      {0.25, -0.25, -0.25, -0.125}, 30);
+//      {0.25, -0.25, -0.25, -0.125}, 30, "iss_trajectory.yaml");
 
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;

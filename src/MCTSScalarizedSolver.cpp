@@ -100,6 +100,60 @@ MCTSScalarizedSolver::MCTSScalarizedSolver(double horizon, double step, string t
   num_costs = 0;  // costs are included in the reward using scalarization
 }
 
+void MCTSScalarizedSolver::reset(double horizon, std::string trajectory_file_name)
+{
+  time_horizon = horizon;
+  t_end = static_cast<size_t>(time_horizon / time_step);
+
+  cout << "Setting time scale to end at time index: " << t_end << endl;
+
+  loadTrajectory(move(trajectory_file_name));
+
+  states.clear();
+  // initialize list of states, waypoint hashes
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    size_t s_hash = stateHash(perch_states[i]);
+    state_index_map[s_hash] = i;
+    for (size_t j = 0; j <= t_end; j++)
+    {
+      states.emplace_back(StateWithTime(i, j));
+      N_s[getIndexS(i, j)] = 0;
+    }
+  }
+
+  cout << "Initialized " << states.size() << " states, and initialized MCTS state-based containers." << endl;
+
+  cout << "Constructing (s(t), a) index list and initializing MCTS state-action-based containers..." << endl;
+
+  num_variables = 0;
+  index_map.resize(perch_states.size());
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    index_map[i].resize(t_end + 1);
+    for (size_t j = 0; j <= t_end; j ++)
+    {
+      index_map[i][j].resize(actions.size());
+      for (size_t k = 0; k < actions.size(); k ++)
+      {
+        if (isValidAction(i, k))
+        {
+          index_map[i][j][k] = num_variables;
+          N_sa[num_variables] = 0;
+          QR_sa[num_variables] = 0;
+          num_variables ++;
+        }
+        else
+        {
+          index_map[i][j][k] = std::numeric_limits<size_t>::max();
+        }
+      }
+    }
+  }
+
+  cout << "Initialized MCTS state-action-based containers." << endl;
+}
+
 uint64_t MCTSScalarizedSolver::xorshift64()
 {
   rand_mutex.lock();

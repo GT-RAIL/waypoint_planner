@@ -26,9 +26,9 @@
 class MCTSRewardSolver
 {
 public:
-    MCTSRewardSolver(double horizon, double step, std::string trajectory_file_name,
-      std::string waypoint_file_name, std::vector<double> constraints, double timeout_sec=10.0,
-      size_t max_time_step_search_depth=150, double exploration_constant=1.0, int num_threads = 1);
+  MCTSRewardSolver(double horizon, double step, std::string trajectory_file_name,
+    std::string waypoint_file_name, std::vector<double> constraints, double timeout_sec=10.0,
+    size_t max_time_step_search_depth=150, double exploration_constant=1.0, int num_threads = 1);
 
   Action search(PerchState s, double t);
 
@@ -45,6 +45,8 @@ public:
   Action getAction(PerchState s, size_t t);
 
   void setConstraints(std::vector<double> constraints);
+
+  void reset(double horizon, std::string trajectory_file_name, std::vector<double> constraints);
 
 private:
   static const uint64_t XORSHIFT_MAX;

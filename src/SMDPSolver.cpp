@@ -49,6 +49,12 @@ SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string traject
   default_human_dims.z = 1.4;
 }
 
+void SMDPSolver::reset(double horizon, string trajectory_file_name)
+{
+  time_horizon = horizon;
+  loadTrajectory(trajectory_file_name);
+}
+
 void SMDPSolver::loadTrajectory(std::string file_name)
 {
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + file_name;

@@ -68,6 +68,54 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   default_human_dims.z = 1.4;
 }
 
+void LPSolver::reset(double horizon, std::string trajectory_file_name)
+{
+  time_horizon = horizon;
+  t_end = static_cast<size_t>(time_horizon / time_step);
+
+  cout << "Setting time scale to end at time index: " << t_end << endl;
+
+  loadTrajectory(move(trajectory_file_name));
+
+  // initialize list of states
+
+  states.clear();
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    for (size_t j = 0; j <= t_end; j ++)
+    {
+      states.emplace_back(StateWithTime(i, j));
+    }
+  }
+
+  cout << "Initialized " << states.size() << " states." << endl;
+
+  cout << "Constructing (s(t), a) list..." << endl;
+
+  num_variables = 0;
+  index_map.resize(perch_states.size());
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    index_map[i].resize(t_end + 1);
+    for (size_t j = 0; j <= t_end; j ++)
+    {
+      index_map[i][j].resize(actions.size());
+      for (size_t k = 0; k < actions.size(); k ++)
+      {
+        if (isValidAction(i, k))
+        {
+          index_map[i][j][k] = num_variables;
+          num_variables ++;
+        }
+        else
+        {
+          index_map[i][j][k] = std::numeric_limits<size_t>::max();
+        }
+      }
+    }
+  }
+}
+
 void LPSolver::constructModel(vector<double> total_costs)
 {
   this->total_costs.clear();
@@ -246,6 +294,7 @@ void LPSolver::solveModel(double timeout)
   REAL vars[num_variables];
   get_variables(lp, vars);
   cout << "Copying results to this object for future use..." << endl;
+  ys.clear();
   for (int i = 0; i < num_variables; i++)
   {
     ys.push_back(vars[i]);

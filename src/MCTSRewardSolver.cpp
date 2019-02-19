@@ -111,6 +111,79 @@ MCTSRewardSolver::MCTSRewardSolver(double horizon, double step, string trajector
   action_switch = false;
 }
 
+void MCTSRewardSolver::reset(double horizon, string trajectory_file_name, vector<double> constraints)
+{
+  time_horizon = horizon;
+  t_end = static_cast<size_t>(time_horizon / time_step);
+
+  num_costs = constraints.size();
+  cost_constraints.resize(num_costs);
+  for (size_t i = 0; i < constraints.size(); i ++)
+  {
+    cost_constraints[i] = constraints[i];
+  }
+
+  cout << "Setting time scale to end at time index: " << t_end << endl;
+
+  loadTrajectory(move(trajectory_file_name));
+
+  states.clear();
+  // initialize list of states, waypoint hashes
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    size_t s_hash = stateHash(perch_states[i]);
+    state_index_map[s_hash] = i;
+    for (size_t j = 0; j <= t_end; j++)
+    {
+      states.emplace_back(StateWithTime(i, j));
+      N_s[getIndexS(i, j)] = 0;
+    }
+  }
+
+  cout << "Initialized " << states.size() << " states, and initialized MCTS state-based containers." << endl;
+
+  cout << "Constructing (s(t), a) index list and initializing MCTS state-action-based containers..." << endl;
+
+  QC_nv_sa.resize(num_costs);
+  QC_v_sa.resize(num_costs);
+
+  num_variables = 0;
+  index_map.resize(perch_states.size());
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    index_map[i].resize(t_end + 1);
+    for (size_t j = 0; j <= t_end; j ++)
+    {
+      index_map[i][j].resize(actions.size());
+      for (size_t k = 0; k < actions.size(); k ++)
+      {
+        if (isValidAction(i, k))
+        {
+          index_map[i][j][k] = num_variables;
+          N_nv_sa[num_variables] = 0;
+          N_v_sa[num_variables] = 0;
+          QR_nv_sa[num_variables] = 0;
+          QR_v_sa[num_variables] = 0;
+          for (size_t l = 0; l < QC_nv_sa.size(); l++)
+          {
+            QC_nv_sa[l][num_variables] = 0;
+            QC_v_sa[l][num_variables] = 0;
+          }
+          num_variables ++;
+        }
+        else
+        {
+          index_map[i][j][k] = std::numeric_limits<size_t>::max();
+        }
+      }
+    }
+  }
+
+  cout << "Initialized MCTS state-action-based containers." << endl;
+
+  action_switch = false;
+}
+
 uint64_t MCTSRewardSolver::xorshift64()
 {
   rand_mutex.lock();

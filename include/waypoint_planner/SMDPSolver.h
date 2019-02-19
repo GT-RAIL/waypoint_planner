@@ -28,6 +28,8 @@ public:
 
   Action getAction(PerchState s, size_t t);
 
+  void reset(double horizon, std::string trajectory_file_name);
+
 private:
   uint8_t mode;
   std::vector<double> linearization_weights;

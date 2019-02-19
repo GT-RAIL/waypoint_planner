@@ -46,6 +46,8 @@ public:
 
   void setWeights(std::vector<double> weights);
 
+  void reset(double horizon, std::string trajectory_file_name);
+
 private:
   static const uint64_t XORSHIFT_MAX;
 

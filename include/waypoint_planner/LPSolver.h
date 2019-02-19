@@ -37,6 +37,8 @@ public:
 
   Action getAction(PerchState s, size_t t);
 
+  void reset(double horizon, std::string trajectory_file_name);
+
 private:
   std::vector<geometry_msgs::Point> waypoints;
   std::vector<PerchState> perch_states;

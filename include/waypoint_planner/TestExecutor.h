@@ -22,7 +22,9 @@ public:
     static const uint8_t MCTS_SCALARIZED;
 
     TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode,
-        std::vector<double> weights, size_t search_depth);
+        std::vector<double> weights, size_t search_depth, std::string trajectory_file);
+
+    void reset(double horizon, std::string trajectory_file);
 
     bool run(double sim_step);
 
@@ -57,6 +59,10 @@ private:
   double c3;
 
   double search_depth_time;
+
+  uint8_t mode;
+  std::vector<double> weights;
+  size_t search_depth;
 
   Action current_action;
   HumanTrajectory trajectory;
