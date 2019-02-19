@@ -7,7 +7,7 @@ HumanSimulator::HumanSimulator() :
 {
   // read in waypoints
   string trajectory_filename;
-  pnh.param<string>("trajectory_file", trajectory_filename, "iss_trajectory.yaml");
+  pnh.param<string>("trajectory_file", trajectory_filename, "pick_place_trajectory.yaml");
   std::cout << "Reading trajectory from " << trajectory_filename << std::endl;
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_filename;
   trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);

@@ -12,14 +12,14 @@ const uint8_t TestExecutor::MCTS_SCALARIZED = 4;
 
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
     size_t search_depth) :
-    solver(horizon, step, mode, "iss_trajectory.yaml", "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
+    solver(horizon, step, mode, "pick_place_trajectory.yaml", "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
     lp_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv"),    // TODO: parameters here for optional values
 //    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
 //        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
     mcts_reward_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", weights, 30.0,
         search_depth, 2, 6),
-    mcts_scalarized_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", weights, 120.0,
-        search_depth, 10000, 6),
+    mcts_scalarized_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints_small.csv", weights, 10.0,
+        search_depth, 100, 6),
     current_action(Action::OBSERVE),
     pnh("~")
 {
@@ -98,9 +98,9 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   robot_marker.ns = "test_robot";
   robot_marker.id = 0;
   robot_marker.type = visualization_msgs::Marker::CUBE;
-  robot_marker.scale.x = 0.2;
-  robot_marker.scale.y = 0.2;
-  robot_marker.scale.z = 0.2;
+  robot_marker.scale.x = 0.25;
+  robot_marker.scale.y = 0.25;
+  robot_marker.scale.z = 0.25;
   robot_marker.color.r = 1.0;
   robot_marker.color.g = 0.0;
   robot_marker.color.b = 1.0;
@@ -276,11 +276,11 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
   vector<double> weights{0.25, -0.25, -0.25, -0.125};
-//  TestExecutor te(150, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, {1.0, 75.0, 25.0}, 150);
-//  TestExecutor te(150, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.25, -0.25, -0.125}, 150);
-//  TestExecutor te(150, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60);
-  TestExecutor te(150, 1.0, TestExecutor::MCTS_SCALARIZED, SMDPFunctions::LINEARIZED_COST,
-      {0.25, -0.25, -0.25, -0.125}, 30);
+//  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, {1.0, 75.0, 25.0}, 180);
+  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.25, -0.25, -0.125}, 180);
+//  TestExecutor te(180, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60);
+//  TestExecutor te(180, 1.0, TestExecutor::MCTS_SCALARIZED, SMDPFunctions::LINEARIZED_COST,
+//      {0.25, -0.25, -0.25, -0.125}, 30);
 
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;

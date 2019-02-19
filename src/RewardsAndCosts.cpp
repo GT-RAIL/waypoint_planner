@@ -10,7 +10,7 @@ double RewardsAndCosts::cost_collision(geometry_msgs::Pose h, geometry_msgs::Vec
   btTransform t_h(btQuaternion(h.orientation.x, h.orientation.y, h.orientation.z, h.orientation.w),
                   btVector3(h.position.x, h.position.y, h.position.z));
   btVector3 r_point(r.x, r.y, r.z);
-  btVector3 half_dims(h_dims.x/2.0, h_dims.y/2.0, h_dims.z/2.0);
+  btVector3 half_dims(h_dims.x/2.0 + .125, h_dims.y/2.0 + .125, h_dims.z/2.0 + .125); // add robot radius of .125
 
   // transform robot point into human coordinate frame
   btVector3 r_h = t_h.inverse()*r_point;
