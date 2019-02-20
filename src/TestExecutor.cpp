@@ -146,6 +146,7 @@ void TestExecutor::reset(double horizon, std::string trajectory_file)
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
   trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
 
+  ROS_INFO("8");
   if (this->approach == LP_SOLVE)
   {
     lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
@@ -375,9 +376,9 @@ void TestExecutor::reportResults()
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
-  vector<double> weights{0.25, -0.25, -0.25, -0.125};
+//  vector<double> weights{0.25, -0.25, -0.25, -0.125};
 //  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, {1.0, 75.0, 25.0}, 180, "iss_trajectory.yaml");
-  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.25, -0.25, -0.125}, 180, "iss_trajectory.yaml");
+  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.5, -0.25, -0.25}, 180, "iss_trajectory.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60, "iss_trajectory.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_SCALARIZED, SMDPFunctions::LINEARIZED_COST,
 //      {0.25, -0.25, -0.25, -0.125}, 30, "iss_trajectory.yaml");
