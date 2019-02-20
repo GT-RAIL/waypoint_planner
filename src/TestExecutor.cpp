@@ -385,19 +385,59 @@ int main(int argc, char **argv)
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;
 
-  ros::Rate loop_rate(300);
-  while (ros::ok())
+  vector<string> trajectory_files = {"experiment_trajectory1.yaml", "experiment_trajectory2.yaml",
+                                     "experiment_trajectory3.yaml", "experiment_trajectory4.yaml",
+                                     "experiment_trajectory5.yaml",
+                                     "inspection_trajectory1.yaml", "inspection_trajectory2.yaml",
+                                     "inspection_trajectory3.yaml", "inspection_trajectory4.yaml",
+                                     "inspection_trajectory5.yaml",
+                                     "pick_place_trajectory1.yaml", "pick_place_trajectory2.yaml",
+                                     "pick_place_trajectory3.yaml", "pick_place_trajectory4.yaml",
+                                     "pick_place_trajectory5.yaml"};
+
+  vector<double> horizons = {184, 178, 193, 130, 191,
+                             176, 204, 184, 187, 162,
+                             172, 174, 189, 165, 181};
+
+  ros::Rate loop_rate(300000000000);
+
+  vector<double> results_r;
+  vector<double> results_c1;
+  vector<double> results_c2;
+  vector<double> results_c3;
+  results_r.resize(trajectory_files.size());
+  results_c1.resize(trajectory_files.size());
+  results_c2.resize(trajectory_files.size());
+  results_c3.resize(trajectory_files.size());
+
+  for (unsigned int i = 0; i < trajectory_files.size(); i ++)
   {
-    ros::spinOnce();
-//    if (te.run(0.0333333333333))
-    if (te.run(0.01))
+    te.reset(horizons[i], trajectory_files[i]);
+
+    while (ros::ok())
     {
-      break;
+      ros::spinOnce();
+      //    if (te.run(0.0333333333333))
+      if (te.run(0.01))
+      {
+        break;
+      }
+      loop_rate.sleep();
     }
-    loop_rate.sleep();
+
+    te.reportResults();
+    results_r[i] += te.r;
+    results_c1[i] += te.c1;
+    results_c2[i] += te.c2;
+    results_c3[i] += te.c3;
   }
 
-  te.reportResults();
+  cout << "\n\n\nFinal Results:" << endl;
+  cout << "(r, c1, c2, c3)" << endl;
+  for (size_t i = 0; i < results_r.size(); i ++)
+  {
+    cout << results_r[i] << ", " << results_c1[i] << ", " << results_c2[i] << ", " << results_c3[i] << ", " << endl;
+  }
 
   return EXIT_SUCCESS;
 }

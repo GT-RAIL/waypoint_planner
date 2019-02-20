@@ -30,6 +30,12 @@ public:
 
     void reportResults();
 
+    // execution metrics
+    double r;
+    double c1;
+    double c2;
+    double c3;
+
 private:
   ros::NodeHandle n, pnh;
 
@@ -51,12 +57,6 @@ private:
   double time_step;
   double current_time;
   double next_decision;
-
-  // execution metrics
-  double r;
-  double c1;
-  double c2;
-  double c3;
 
   double search_depth_time;
 

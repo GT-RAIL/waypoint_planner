@@ -103,6 +103,13 @@ target_link_libraries(trajectory_setter
   yaml-cpp
 )
 
+add_executable(time_sampler
+  src/TimeSampler.cpp
+)
+target_link_libraries(time_sampler
+  ${catkin_LIBRARIES}
+)
+
 add_executable(test_node
   src/TestNode.cpp
   src/State.cpp
