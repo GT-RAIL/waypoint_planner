@@ -29,7 +29,7 @@ public:
 
   void constructModel(std::vector<double> total_costs);
 
-  void solveModel(double timeout);
+  bool solveModel(double timeout);
 
   void loadModel(std::string file_name);
 

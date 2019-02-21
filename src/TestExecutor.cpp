@@ -53,9 +53,10 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
 
   if (this->approach == LP_SOLVE)
   {
-    lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
-    lp_solver.solveModel(600);  // solver timeout (s) before restarting
-    ROS_INFO("LP model solved.");
+    //TODO: temp: commented out for multiple testing (will be set and solved with reset())
+//    lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
+//    lp_solver.solveModel(600);  // solver timeout (s) before restarting
+//    ROS_INFO("LP model solved.");
   }
   else if (this->approach == LP_LOAD)
   {
@@ -116,7 +117,7 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   robot_marker.color.a = 1.0;
 }
 
-void TestExecutor::reset(double horizon, std::string trajectory_file)
+bool TestExecutor::reset(double horizon, std::string trajectory_file)
 {
   if (approach == TestExecutor::SMDP)
   {
@@ -146,11 +147,13 @@ void TestExecutor::reset(double horizon, std::string trajectory_file)
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
   trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
 
-  ROS_INFO("8");
   if (this->approach == LP_SOLVE)
   {
     lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
-    lp_solver.solveModel(600);  // solver timeout (s) before restarting
+    if (!lp_solver.solveModel(600))  // solver timeout (s) before restarting
+    {
+      return false;
+    }
     ROS_INFO("LP model solved.");
   }
   else if (this->approach == LP_LOAD)
@@ -206,6 +209,8 @@ void TestExecutor::reset(double horizon, std::string trajectory_file)
   robot_marker.color.g = 0.0;
   robot_marker.color.b = 1.0;
   robot_marker.color.a = 1.0;
+
+  return true;
 }
 
 bool TestExecutor::run(double sim_step)
@@ -376,9 +381,10 @@ void TestExecutor::reportResults()
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
-//  vector<double> weights{0.25, -0.25, -0.25, -0.125};
-//  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, {1.0, 75.0, 25.0}, 180, "iss_trajectory.yaml");
-  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.5, -0.25, -0.25}, 180, "iss_trajectory.yaml");
+  vector<double> weights{1, 180, 180};
+  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
+//  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.5, -0.25, -0.25}, 180, "inspection_trajectory1.yaml");
+  TestExecutor te_repeat(180, 1.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60, "iss_trajectory.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_SCALARIZED, SMDPFunctions::LINEARIZED_COST,
 //      {0.25, -0.25, -0.25, -0.125}, 30, "iss_trajectory.yaml");
@@ -386,59 +392,121 @@ int main(int argc, char **argv)
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;
 
+//  vector<string> trajectory_files = {"experiment_trajectory1.yaml", "experiment_trajectory2.yaml",
+//                                     "experiment_trajectory3.yaml", "experiment_trajectory4.yaml",
+//                                     "experiment_trajectory5.yaml",
+//                                     "inspection_trajectory1.yaml", "inspection_trajectory2.yaml",
+//                                     "inspection_trajectory3.yaml", "inspection_trajectory4.yaml",
+//                                     "inspection_trajectory5.yaml",
+//                                     "pick_place_trajectory1.yaml", "pick_place_trajectory2.yaml",
+//                                     "pick_place_trajectory3.yaml", "pick_place_trajectory4.yaml",
+//                                     "pick_place_trajectory5.yaml"};
+//
+//  vector<double> horizons = {184, 178, 193, 130, 191,
+//                             176, 204, 184, 187, 162,
+//                             172, 174, 189, 165, 181};
+
   vector<string> trajectory_files = {"experiment_trajectory1.yaml", "experiment_trajectory2.yaml",
                                      "experiment_trajectory3.yaml", "experiment_trajectory4.yaml",
-                                     "experiment_trajectory5.yaml",
-                                     "inspection_trajectory1.yaml", "inspection_trajectory2.yaml",
-                                     "inspection_trajectory3.yaml", "inspection_trajectory4.yaml",
-                                     "inspection_trajectory5.yaml",
-                                     "pick_place_trajectory1.yaml", "pick_place_trajectory2.yaml",
-                                     "pick_place_trajectory3.yaml", "pick_place_trajectory4.yaml",
-                                     "pick_place_trajectory5.yaml"};
+                                     "experiment_trajectory5.yaml"};
 
-  vector<double> horizons = {184, 178, 193, 130, 191,
-                             176, 204, 184, 187, 162,
-                             172, 174, 189, 165, 181};
+  vector<double> horizons = {184, 178, 193, 130, 191};
 
-  ros::Rate loop_rate(300000000000);
+  ros::Rate loop_rate(30000000000);
+//  while (ros::ok())
+//  {
+//    ros::spinOnce();
+//    //    if (te.run(0.0333333333333))
+//    if (te.run(0.01))
+//    {
+//      break;
+//    }
+//    loop_rate.sleep();
+//  }
+//
+//  te.reportResults();
+//  return EXIT_SUCCESS;
 
   vector<double> results_r;
   vector<double> results_c1;
   vector<double> results_c2;
   vector<double> results_c3;
-  results_r.resize(trajectory_files.size());
-  results_c1.resize(trajectory_files.size());
-  results_c2.resize(trajectory_files.size());
-  results_c3.resize(trajectory_files.size());
+  results_r.resize(trajectory_files.size()*10);
+  results_c1.resize(trajectory_files.size()*10);
+  results_c2.resize(trajectory_files.size()*10);
+  results_c3.resize(trajectory_files.size()*10);
 
-  for (unsigned int i = 0; i < trajectory_files.size(); i ++)
+  int index = -1;
+  for (unsigned int i = 0; i < trajectory_files.size()*10; i ++)
   {
-    te.reset(horizons[i], trajectory_files[i]);
+    if (i%10 == 0)
+    {
+      index ++;
+      if (!te.reset(horizons[index], trajectory_files[index]))
+      {
+        i += 9;
+        continue;
+      }
+    }
+    else
+    {
+      te_repeat.reset(horizons[index], trajectory_files[index]);
+    }
 
     while (ros::ok())
     {
       ros::spinOnce();
       //    if (te.run(0.0333333333333))
-      if (te.run(0.01))
+      if (i%10 == 0)
       {
-        break;
+        if (te.run(0.01))
+        {
+          break;
+        }
+      }
+      else
+      {
+        if (te_repeat.run(0.01))
+        {
+          break;
+        }
       }
       loop_rate.sleep();
     }
 
-    te.reportResults();
-    results_r[i] += te.r;
-    results_c1[i] += te.c1;
-    results_c2[i] += te.c2;
-    results_c3[i] += te.c3;
+    if (i % 10 == 0)
+    {
+      te.reportResults();
+      results_r[i] += te.r;
+      results_c1[i] += te.c1;
+      results_c2[i] += te.c2;
+      results_c3[i] += te.c3;
+    }
+    else
+    {
+      te_repeat.reportResults();
+      results_r[i] += te_repeat.r;
+      results_c1[i] += te_repeat.c1;
+      results_c2[i] += te_repeat.c2;
+      results_c3[i] += te_repeat.c3;
+    }
+
+    cout << "\n\n\nAll Results:" << endl;
+    cout << "(r, c1, c2, c3)" << endl;
+    for (size_t i = 0; i < results_r.size(); i ++)
+    {
+      cout << results_r[i] << "," << results_c1[i] << "," << results_c2[i] << "," << results_c3[i] << "," << endl;
+    }
   }
 
   cout << "\n\n\nFinal Results:" << endl;
   cout << "(r, c1, c2, c3)" << endl;
   for (size_t i = 0; i < results_r.size(); i ++)
   {
-    cout << results_r[i] << ", " << results_c1[i] << ", " << results_c2[i] << ", " << results_c3[i] << ", " << endl;
+    cout << results_r[i] << "," << results_c1[i] << "," << results_c2[i] << "," << results_c3[i] << "," << endl;
   }
+
+  cout << "Finished all trials." << endl;
 
   return EXIT_SUCCESS;
 }

@@ -250,38 +250,29 @@ void LPSolver::constructModel(vector<double> total_costs)
 //  free(row);
 }
 
-void LPSolver::solveModel(double timeout)
+bool LPSolver::solveModel(double timeout)
 {
   int suboptimal_solutions = 0;
   int total_attempts = 0;
 
-  bool finished = false;
+  set_timeout(lp, timeout);
 
-  while (!finished)
-  {
-    set_timeout(lp, timeout);
+  total_attempts ++;
 
-    total_attempts ++;
+  cout << "Simplifying model for linearly dependent rows..." << endl;
+//  set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_LINDEP, get_presolveloops(lp));
+  cout << "Simplification complete." << endl;
 
-    cout << "Simplifying model for linearly dependent rows..." << endl;
-//    set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_LINDEP, get_presolveloops(lp));
-    cout << "Simplification complete." << endl;
+  cout << "Attempting to solve model..." << endl;
+  int success = solve(lp);
 
-    cout << "Attempting to solve model..." << endl;
-    int success = solve(lp);
+  cout << "Model finished, with code: " << success << endl;
+  if (success != 0)
+    return false;
 
-    cout << "Model finished, with code: " << success << endl;
-    if (success == 1)
-      suboptimal_solutions ++;
-    cout << "Current progress: " << suboptimal_solutions << "/" << total_attempts << endl;
-    cout << endl;
-    if (success == 0)
-      break;
+  free(lp);
 
-    free(lp);
-
-    constructModel(this->total_costs);
-  }
+  constructModel(this->total_costs);
 
   cout << "Objective value: " << get_objective(lp) << endl;
 
@@ -311,29 +302,31 @@ void LPSolver::solveModel(double timeout)
   else
   {
     cout << "Could not open file.  Freeing up memory and returning." << endl;
-    return;
+    return false;
   }
 
   cout << "Results written.  Freeing up memory and returning." << endl;
   free(lp);
 
-  cout << "***********************************************\nnonzero values: " << endl;
-  for (size_t n = 0; n < perch_states.size(); n ++)
-  {
-    for (size_t i = 0; i < t_end + 1; i++)
-    {
-      for (size_t j = 0; j < actions.size(); j++)
-      {
-        if (isValidAction(n, j))
-        {
-          if (ys[getIndex(n, i, j)] > 0.00001)
-            cout << "\tw" << waypointToIndex(perch_states[n].waypoint) << "-" << perch_states[n].perched
-               << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
-        }
-      }
-    }
-  }
-  cout << "***********************************************" << endl;
+//  cout << "***********************************************\nnonzero values: " << endl;
+//  for (size_t n = 0; n < perch_states.size(); n ++)
+//  {
+//    for (size_t i = 0; i < t_end + 1; i++)
+//    {
+//      for (size_t j = 0; j < actions.size(); j++)
+//      {
+//        if (isValidAction(n, j))
+//        {
+//          if (ys[getIndex(n, i, j)] > 0.00001)
+//            cout << "\tw" << waypointToIndex(perch_states[n].waypoint) << "-" << perch_states[n].perched
+//               << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
+//        }
+//      }
+//    }
+//  }
+//  cout << "***********************************************" << endl;
+
+  return true;
 }
 
 void LPSolver::loadModel(string file_name)
@@ -349,23 +342,23 @@ void LPSolver::loadModel(string file_name)
       ys.push_back(atof(line.c_str()));
     }
     model_file.close();
-    cout << "***********************************************\nnonzero values: " << endl;
-    for (size_t n = 0; n < perch_states.size(); n ++)
-    {
-      for (size_t i = 0; i < t_end + 1; i++)
-      {
-        for (size_t j = 0; j < actions.size(); j++)
-        {
-          if (isValidAction(n, j))
-          {
-            if (ys[getIndex(n, i, j)] > 0.00001)
-              cout << "\tw" << waypointToIndex(perch_states[n].waypoint) << "-" << perch_states[n].perched
-                << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
-          }
-        }
-      }
-    }
-    cout << "***********************************************" << endl;
+//    cout << "***********************************************\nnonzero values: " << endl;
+//    for (size_t n = 0; n < perch_states.size(); n ++)
+//    {
+//      for (size_t i = 0; i < t_end + 1; i++)
+//      {
+//        for (size_t j = 0; j < actions.size(); j++)
+//        {
+//          if (isValidAction(n, j))
+//          {
+//            if (ys[getIndex(n, i, j)] > 0.00001)
+//              cout << "\tw" << waypointToIndex(perch_states[n].waypoint) << "-" << perch_states[n].perched
+//                << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
+//          }
+//        }
+//      }
+//    }
+//    cout << "***********************************************" << endl;
     cout << "LP solution loaded." << endl;
   }
 }
