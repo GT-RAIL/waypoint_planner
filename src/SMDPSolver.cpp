@@ -75,6 +75,7 @@ void SMDPSolver::backwardsInduction()
   // initialize optimal utility and action lists
   utility_map.clear();
   action_map.clear();
+  perch_states.clear();
   vector<double> u_init(t_end + 1, 0.0);
   vector<Action> a_init(t_end + 1, Action(Action::OBSERVE));
   for (size_t i = 0; i < waypoints.size(); i ++)
