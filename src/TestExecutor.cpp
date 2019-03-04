@@ -146,7 +146,6 @@ void TestExecutor::reset(double horizon, std::string trajectory_file)
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
   trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
 
-  ROS_INFO("8");
   if (this->approach == LP_SOLVE)
   {
     lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
@@ -217,6 +216,9 @@ bool TestExecutor::run(double sim_step)
       ROS_INFO("Move action complete.");
       state.waypoint = current_action.actionGoal();
       robot_marker.pose.position = state.waypoint;
+      robot_marker.color.r = 1.0;
+      robot_marker.color.g = 0.0;
+      robot_marker.color.b = 1.0;
       robot_marker.color.a = 1.0;
     }
     else if (current_action.actionType() == Action::PERCH)
@@ -224,6 +226,7 @@ bool TestExecutor::run(double sim_step)
       state.perched = true;
       robot_marker.color.r = 0.0;
       robot_marker.color.g = 1.0;
+      robot_marker.color.b = 1.0;
       robot_marker.color.a = 1.0;
     }
     else if (current_action.actionType() == Action::UNPERCH)
@@ -231,6 +234,7 @@ bool TestExecutor::run(double sim_step)
       state.perched = false;
       robot_marker.color.r = 1.0;
       robot_marker.color.g = 0.0;
+      robot_marker.color.b = 1.0;
       robot_marker.color.a = 1.0;
     }
 
@@ -257,19 +261,28 @@ bool TestExecutor::run(double sim_step)
     {
       ROS_INFO("Starting move action.");
       goal = current_action.actionGoal();
-      robot_marker.color.a = 0.5;
+      robot_marker.color.r = 1.0;
+      robot_marker.color.g = 0.5;
+      robot_marker.color.b = 0.0;
+      robot_marker.color.a = 0.6;
     }
     else if (current_action.actionType() == Action::PERCH)
     {
       ROS_INFO("Starting perch action.");
       goal = state.waypoint;
-      robot_marker.color.a = 0.5;
+      robot_marker.color.r = 0.0;
+      robot_marker.color.g = 1.0;
+      robot_marker.color.b = 1.0;
+      robot_marker.color.a = 0.6;
     }
     else if (current_action.actionType() == Action::UNPERCH)
     {
       ROS_INFO("Starting unperch action.");
       goal = state.waypoint;
-      robot_marker.color.a = 0.5;
+      robot_marker.color.r = 1.0;
+      robot_marker.color.g = 0.0;
+      robot_marker.color.b = 1.0;
+      robot_marker.color.a = 0.6;
     }
     else
     {
@@ -293,6 +306,19 @@ bool TestExecutor::run(double sim_step)
         break;
       }
     }
+
+    if (current_action.actionType() == Action::MOVE)
+    {
+      start_move_time = current_time;
+      move_dur = duration;
+      dx = goal.x - state.waypoint.x;
+      dy = goal.y - state.waypoint.y;
+      dz = goal.z - state.waypoint.z;
+      startx = state.waypoint.x;
+      starty = state.waypoint.y;
+      startz = state.waypoint.z;
+    }
+
     next_decision = current_time + duration;
     ROS_INFO("Action duration: %f", duration);
 
@@ -333,7 +359,6 @@ bool TestExecutor::run(double sim_step)
       //mcts_solver.updateConstraints(current_action.actionGoal(), next_decision);
     }
 
-
     // calculate rewards and costs and add them to the totals
     if (current_action.actionType() == Action::OBSERVE)
     {
@@ -354,6 +379,19 @@ bool TestExecutor::run(double sim_step)
 
   // update fake execution time
   current_time += sim_step;
+
+  // update robot's position if moving
+  if (current_action.actionType() == Action::MOVE)
+  {
+    double ratio = 1.0;
+    if (current_time - start_move_time <= move_dur)
+    {
+      ratio = (current_time - start_move_time)/move_dur;
+    }
+    robot_marker.pose.position.x = startx + dx*ratio;
+    robot_marker.pose.position.y = starty + dy*ratio;
+    robot_marker.pose.position.z = startz + dz*ratio;
+  }
 
   // send time update to human trajectory visualizer
   robot_vis_publisher.publish(robot_marker);
@@ -386,21 +424,23 @@ int main(int argc, char **argv)
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;
 
-  vector<string> trajectory_files = {"experiment_trajectory1.yaml", "experiment_trajectory2.yaml",
-                                     "experiment_trajectory3.yaml", "experiment_trajectory4.yaml",
-                                     "experiment_trajectory5.yaml",
-                                     "inspection_trajectory1.yaml", "inspection_trajectory2.yaml",
-                                     "inspection_trajectory3.yaml", "inspection_trajectory4.yaml",
-                                     "inspection_trajectory5.yaml",
-                                     "pick_place_trajectory1.yaml", "pick_place_trajectory2.yaml",
-                                     "pick_place_trajectory3.yaml", "pick_place_trajectory4.yaml",
-                                     "pick_place_trajectory5.yaml"};
+//  vector<string> trajectory_files = {"experiment_trajectory1.yaml", "experiment_trajectory2.yaml",
+//                                     "experiment_trajectory3.yaml", "experiment_trajectory4.yaml",
+//                                     "experiment_trajectory5.yaml",
+//                                     "inspection_trajectory1.yaml", "inspection_trajectory2.yaml",
+//                                     "inspection_trajectory3.yaml", "inspection_trajectory4.yaml",
+//                                     "inspection_trajectory5.yaml",
+//                                     "pick_place_trajectory1.yaml", "pick_place_trajectory2.yaml",
+//                                     "pick_place_trajectory3.yaml", "pick_place_trajectory4.yaml",
+//                                     "pick_place_trajectory5.yaml"};
+//
+//  vector<double> horizons = {184, 178, 193, 130, 191,
+//                             176, 204, 184, 187, 162,
+//                             172, 174, 189, 165, 181};
+  vector<string> trajectory_files = {"inspection_trajectory1.yaml"};
+  vector<double> horizons = {176};
 
-  vector<double> horizons = {184, 178, 193, 130, 191,
-                             176, 204, 184, 187, 162,
-                             172, 174, 189, 165, 181};
-
-  ros::Rate loop_rate(300000000000);
+  ros::Rate loop_rate(500);
 
   vector<double> results_r;
   vector<double> results_c1;

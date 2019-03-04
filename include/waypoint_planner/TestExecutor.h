@@ -60,6 +60,15 @@ private:
 
   double search_depth_time;
 
+  double move_dur;
+  double start_move_time;
+  double dx;
+  double dy;
+  double dz;
+  double startx;
+  double starty;
+  double startz;
+
   uint8_t mode;
   std::vector<double> weights;
   size_t search_depth;
