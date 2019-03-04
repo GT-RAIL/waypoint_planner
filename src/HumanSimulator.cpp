@@ -19,14 +19,16 @@ HumanSimulator::HumanSimulator() :
   pnh.param<double>("speed_factor", speed_factor, 1.0);
   time = 0;
   human_marker = EnvironmentSetup::initializeHumanMarker();
+  addHumanMarker("human", 0.4, 0.8, 1.0, false);
   human_marker_publisher = pnh.advertise<visualization_msgs::Marker>("human_marker", 1, this);
+  human_markers_publisher = pnh.advertise<visualization_msgs::MarkerArray>("human_markers", 1, this);
   task_markers_publisher = pnh.advertise<visualization_msgs::MarkerArray>("task_markers", 1, this);
   time_update_subscriber = pnh.subscribe<std_msgs::Float32>("time_update", 0, &HumanSimulator::timeUpdateCallback, this);
 
   createTaskMarkers(task_vis);
 }
 
-void HumanSimulator::addHumanMarker(string frame, double r, double g, double b)
+void HumanSimulator::addHumanMarker(string frame, double r, double g, double b, bool task_image)
 {
   visualization_msgs::Marker head;
   head.header.frame_id = frame;
@@ -146,12 +148,24 @@ void HumanSimulator::addHumanMarker(string frame, double r, double g, double b)
   leg_r_bot.color.b = b;
   leg_r_bot.color.a = 1.0;
 
-  task_markers.markers.push_back(head);
-  task_markers.markers.push_back(body);
-  task_markers.markers.push_back(leg_l_top);
-  task_markers.markers.push_back(leg_l_bot);
-  task_markers.markers.push_back(leg_r_top);
-  task_markers.markers.push_back(leg_r_bot);
+  if (task_image)
+  {
+    task_markers.markers.push_back(head);
+    task_markers.markers.push_back(body);
+    task_markers.markers.push_back(leg_l_top);
+    task_markers.markers.push_back(leg_l_bot);
+    task_markers.markers.push_back(leg_r_top);
+    task_markers.markers.push_back(leg_r_bot);
+  }
+  else
+  {
+    human_markers.markers.push_back(head);
+    human_markers.markers.push_back(body);
+    human_markers.markers.push_back(leg_l_top);
+    human_markers.markers.push_back(leg_l_bot);
+    human_markers.markers.push_back(leg_r_top);
+    human_markers.markers.push_back(leg_r_bot);
+  }
 }
 
 void HumanSimulator::createTaskMarkers(int task)
@@ -311,6 +325,7 @@ void HumanSimulator::publishTFs()
   tf_broadcaster.sendTransform(task_tf2);
   tf_broadcaster.sendTransform(task_tf3);
   human_marker_publisher.publish(human_marker);
+  human_markers_publisher.publish(human_markers);
   task_markers_publisher.publish(task_markers);
 }
 

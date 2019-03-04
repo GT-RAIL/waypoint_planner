@@ -31,11 +31,12 @@ private:
 
   void createTaskMarkers(int task);
 
-  void addHumanMarker(std::string frame, double r, double g, double b);
+  void addHumanMarker(std::string frame, double r, double g, double b, bool task_image=true);
 
   ros::NodeHandle n, pnh;
 
   ros::Publisher human_marker_publisher;
+  ros::Publisher human_markers_publisher;
   ros::Publisher task_markers_publisher;
   ros::Subscriber time_update_subscriber;
 
@@ -46,6 +47,7 @@ private:
   double speed_factor;
 
   visualization_msgs::Marker human_marker;
+  visualization_msgs::MarkerArray human_markers;
   visualization_msgs::MarkerArray task_markers;
 
   geometry_msgs::TransformStamped task_tf1;
