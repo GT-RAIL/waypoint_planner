@@ -436,12 +436,12 @@ void TestExecutor::freeLP()
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
-  vector<double> weights{1, 300, 40};
-  TestExecutor te(180, 2.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
-  TestExecutor te_repeat(180, 2.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
-//  vector<double> weights{0.4, -0.2, 0, 0};
-//  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
-//  TestExecutor te_repeat(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
+//  vector<double> weights{1, 300, 40};
+//  TestExecutor te(180, 2.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
+//  TestExecutor te_repeat(180, 2.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
+  vector<double> weights{0.67, -0.33, 0, 0};
+  TestExecutor te(176, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
+  TestExecutor te_repeat(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60, "iss_trajectory.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_SCALARIZED, SMDPFunctions::LINEARIZED_COST,
 //      {0.25, -0.25, -0.25, -0.125}, 30, "iss_trajectory.yaml");
@@ -481,21 +481,21 @@ int main(int argc, char **argv)
 //                             176, 204, 184, 187, 162,
 //                             172, 174, 189, 165, 181};
 
-  ros::Rate loop_rate(30000000000);
-//  //TODO: uncomment here for single run
-//  while (ros::ok())
-//  {
-//    ros::spinOnce();
-//    //    if (te.run(0.0333333333333))
-//    if (te.run(0.01))
-//    {
-//      break;
-//    }
-//    loop_rate.sleep();
-//  }
-//
-//  te.reportResults();
-//  return EXIT_SUCCESS;
+  ros::Rate loop_rate(500);
+  //TODO: uncomment here for single run
+  while (ros::ok())
+  {
+    ros::spinOnce();
+    //    if (te.run(0.0333333333333))
+    if (te.run(0.01))
+    {
+      break;
+    }
+    loop_rate.sleep();
+  }
+
+  te.reportResults();
+  return EXIT_SUCCESS;
 
 //  //TODO: uncomment here for testing one run on all trajectories
 //  vector<double> results_r;
