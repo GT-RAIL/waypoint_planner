@@ -24,11 +24,15 @@ public:
     TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode,
         std::vector<double> weights, size_t search_depth, std::string trajectory_file);
 
-    bool reset(double horizon, std::string trajectory_file);
+    bool reset(double horizon, std::string trajectory_file, std::string lp_model="results");
 
     bool run(double sim_step);
 
     void reportResults();
+
+    bool retryLP(int scaling_type);
+
+    void freeLP();
 
     // execution metrics
     double r;

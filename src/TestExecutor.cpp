@@ -117,7 +117,7 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   robot_marker.color.a = 1.0;
 }
 
-bool TestExecutor::reset(double horizon, std::string trajectory_file)
+bool TestExecutor::reset(double horizon, string trajectory_file, string lp_model)
 {
   if (approach == TestExecutor::SMDP)
   {
@@ -125,7 +125,7 @@ bool TestExecutor::reset(double horizon, std::string trajectory_file)
   }
   else if (approach == TestExecutor::LP_SOLVE || approach == TestExecutor::LP_LOAD)
   {
-    lp_solver.reset(horizon, trajectory_file);
+    lp_solver.reset(horizon, trajectory_file, lp_model);
   }
   else if (approach == TestExecutor::MCTS_CONSTRAINED)
   {
@@ -147,43 +147,6 @@ bool TestExecutor::reset(double horizon, std::string trajectory_file)
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
   trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
 
-  if (this->approach == LP_SOLVE)
-  {
-    lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
-    if (!lp_solver.solveModel(600))  // solver timeout (s) before restarting
-    {
-      return false;
-    }
-    ROS_INFO("LP model solved.");
-  }
-  else if (this->approach == LP_LOAD)
-  {
-    lp_solver.loadModel("var_results.txt");
-    ROS_INFO("LP model loaded.");
-  }
-  else if (this->approach == SMDP)
-  {
-    solver.backwardsInduction();
-    ROS_INFO("Policy computed.");
-  }
-
-  time_horizon = horizon;
-  current_time = 0;
-  next_decision = 0;
-  search_depth_time = search_depth*time_step;
-
-  if (this->approach == MCTS_CONSTRAINED)
-  {
-    //time-scaling for non-full-depth searches
-    double time_scaling = search_depth_time / (time_horizon - current_time);
-    if (time_scaling > 1.0)
-    {
-      time_scaling = 1.0;
-    }
-
-    mcts_reward_solver.setConstraints({time_scaling*c1_hat, time_scaling*c2_hat, time_scaling*c3_hat});
-  }
-
   // TODO: better state initialization
   state.waypoint.x = 11.39;
   state.waypoint.y = -10.12;
@@ -194,6 +157,11 @@ bool TestExecutor::reset(double horizon, std::string trajectory_file)
   c1 = 0;
   c2 = 0;
   c3 = 0;
+
+  time_horizon = horizon;
+  current_time = 0;
+  next_decision = 0;
+  search_depth_time = search_depth*time_step;
 
   robot_marker.header.frame_id = "world";
   robot_marker.pose.position = state.waypoint;
@@ -209,6 +177,38 @@ bool TestExecutor::reset(double horizon, std::string trajectory_file)
   robot_marker.color.g = 0.0;
   robot_marker.color.b = 1.0;
   robot_marker.color.a = 1.0;
+
+  if (this->approach == LP_SOLVE)
+  {
+    lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
+    if (!lp_solver.solveModel(1200))  // solver timeout (s) before restarting
+    {
+      return false;
+    }
+    ROS_INFO("LP model solved.");
+  }
+  else if (this->approach == LP_LOAD)
+  {
+    lp_solver.loadModel("var_" + lp_model + ".txt");
+    ROS_INFO("LP model loaded.");
+  }
+  else if (this->approach == SMDP)
+  {
+    solver.backwardsInduction();
+    ROS_INFO("Policy computed.");
+  }
+
+  if (this->approach == MCTS_CONSTRAINED)
+  {
+    //time-scaling for non-full-depth searches
+    double time_scaling = search_depth_time / (time_horizon - current_time);
+    if (time_scaling > 1.0)
+    {
+      time_scaling = 1.0;
+    }
+
+    mcts_reward_solver.setConstraints({time_scaling*c1_hat, time_scaling*c2_hat, time_scaling*c3_hat});
+  }
 
   return true;
 }
@@ -378,13 +378,31 @@ void TestExecutor::reportResults()
   std::cout << "Total accumulated power cost: " << c3 << std::endl;
 }
 
+bool TestExecutor::retryLP(int scaling_type)
+{
+  lp_solver.setScaling(scaling_type);
+  if (!lp_solver.solveModel(1200))  // solver timeout (s) before restarting
+  {
+    return false;
+  }
+  ROS_INFO("LP model solved.");
+  return true;
+}
+
+void TestExecutor::freeLP()
+{
+  lp_solver.freeModel();
+}
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
-  vector<double> weights{1, 180, 180};
-  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
-//  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, {0.25, -0.5, -0.25, -0.25}, 180, "inspection_trajectory1.yaml");
-  TestExecutor te_repeat(180, 1.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
+  vector<double> weights{1, 300, 40};
+  TestExecutor te(180, 2.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
+  TestExecutor te_repeat(180, 2.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
+//  vector<double> weights{0.4, -0.2, 0, 0};
+//  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
+//  TestExecutor te_repeat(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60, "iss_trajectory.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_SCALARIZED, SMDPFunctions::LINEARIZED_COST,
 //      {0.25, -0.25, -0.25, -0.125}, 30, "iss_trajectory.yaml");
@@ -392,8 +410,26 @@ int main(int argc, char **argv)
 //  //This is a temporary return to test the LP solver in isolation
 //  return EXIT_SUCCESS;
 
+  vector<string> trajectory_files = {"inspection_trajectory1.yaml", "inspection_trajectory2.yaml",
+                                     "inspection_trajectory3.yaml", "inspection_trajectory4.yaml",
+                                     "inspection_trajectory5.yaml",
+                                     "inspection_trajectory1.yaml", "inspection_trajectory2.yaml",
+                                     "inspection_trajectory3.yaml", "inspection_trajectory4.yaml",
+                                     "inspection_trajectory5.yaml",
+                                     "experiment_trajectory1.yaml", "experiment_trajectory2.yaml",
+                                     "experiment_trajectory3.yaml", "experiment_trajectory6.yaml",
+                                     "experiment_trajectory5.yaml",
+                                     "pick_place_trajectory1.yaml", "pick_place_trajectory2.yaml",
+                                     "pick_place_trajectory3.yaml", "pick_place_trajectory4.yaml",
+                                     "pick_place_trajectory5.yaml"};
+
+  vector<double> horizons = {176, 204, 184, 187, 162,
+                             176, 204, 184, 187, 162,
+                             184, 178, 193, 184, 191,
+                             172, 174, 189, 165, 181};
+
 //  vector<string> trajectory_files = {"experiment_trajectory1.yaml", "experiment_trajectory2.yaml",
-//                                     "experiment_trajectory3.yaml", "experiment_trajectory4.yaml",
+//                                     "experiment_trajectory3.yaml", "experiment_trajectory6.yaml",
 //                                     "experiment_trajectory5.yaml",
 //                                     "inspection_trajectory1.yaml", "inspection_trajectory2.yaml",
 //                                     "inspection_trajectory3.yaml", "inspection_trajectory4.yaml",
@@ -402,17 +438,12 @@ int main(int argc, char **argv)
 //                                     "pick_place_trajectory3.yaml", "pick_place_trajectory4.yaml",
 //                                     "pick_place_trajectory5.yaml"};
 //
-//  vector<double> horizons = {184, 178, 193, 130, 191,
+//  vector<double> horizons = {184, 178, 193, 184, 191,
 //                             176, 204, 184, 187, 162,
 //                             172, 174, 189, 165, 181};
 
-  vector<string> trajectory_files = {"experiment_trajectory1.yaml", "experiment_trajectory2.yaml",
-                                     "experiment_trajectory3.yaml", "experiment_trajectory4.yaml",
-                                     "experiment_trajectory5.yaml"};
-
-  vector<double> horizons = {184, 178, 193, 130, 191};
-
   ros::Rate loop_rate(30000000000);
+//  //TODO: uncomment here for single run
 //  while (ros::ok())
 //  {
 //    ros::spinOnce();
@@ -427,6 +458,55 @@ int main(int argc, char **argv)
 //  te.reportResults();
 //  return EXIT_SUCCESS;
 
+//  //TODO: uncomment here for testing one run on all trajectories
+//  vector<double> results_r;
+//  vector<double> results_c1;
+//  vector<double> results_c2;
+//  vector<double> results_c3;
+//  results_r.resize(trajectory_files.size());
+//  results_c1.resize(trajectory_files.size());
+//  results_c2.resize(trajectory_files.size());
+//  results_c3.resize(trajectory_files.size());
+//
+//  for (unsigned int i = 0; i < trajectory_files.size(); i ++)
+//  {
+//    te.reset(horizons[i], trajectory_files[i]);
+//
+//    while (ros::ok())
+//    {
+//      ros::spinOnce();
+//      //    if (te.run(0.0333333333333))
+//      if (te.run(0.01))
+//      {
+//        break;
+//      }
+//      loop_rate.sleep();
+//    }
+//
+//    te.reportResults();
+//    results_r[i] += te.r;
+//    results_c1[i] += te.c1;
+//    results_c2[i] += te.c2;
+//    results_c3[i] += te.c3;
+//
+//    cout << "\n\n\nAll Results:" << endl;
+//    cout << "(r, c1, c2, c3)" << endl;
+//    for (size_t i = 0; i < results_r.size(); i ++)
+//    {
+//      cout << results_r[i] << "," << results_c1[i] << "," << results_c2[i] << "," << results_c3[i] << "," << endl;
+//    }
+//  }
+//
+//  cout << "\n\n\nFinal Results:" << endl;
+//  cout << "(r, c1, c2, c3)" << endl;
+//  for (size_t i = 0; i < results_r.size(); i ++)
+//  {
+//    cout << results_r[i] << "," << results_c1[i] << "," << results_c2[i] << "," << results_c3[i] << "," << endl;
+//  }
+//
+//  cout << "Finished all trials." << endl;
+
+  //TODO: uncomment here for LP testing
   vector<double> results_r;
   vector<double> results_c1;
   vector<double> results_c2;
@@ -442,15 +522,34 @@ int main(int argc, char **argv)
     if (i%10 == 0)
     {
       index ++;
-      if (!te.reset(horizons[index], trajectory_files[index]))
+      if (!te.reset(horizons[index], trajectory_files[index], trajectory_files[index]))
       {
-        i += 9;
-        continue;
+        bool lp_solved = false;
+        for (int attempt = 1; attempt < 3; attempt ++)
+        {
+          lp_solved = te.retryLP(attempt);
+          if (lp_solved)
+          {
+            break;
+          }
+        }
+        if (!lp_solved)
+        {
+          i += 9;
+          cout << "\n\n\nAll Results: (" << index << ")" << endl;
+          cout << "(r, c1, c2, c3)" << endl;
+          for (size_t i = 0; i < results_r.size(); i++)
+          {
+            cout << results_r[i] << "," << results_c1[i] << "," << results_c2[i] << "," << results_c3[i] << "," << endl;
+          }
+          te.freeLP();
+          continue;
+        }
       }
     }
     else
     {
-      te_repeat.reset(horizons[index], trajectory_files[index]);
+      te_repeat.reset(horizons[index], trajectory_files[index], trajectory_files[index]);
     }
 
     while (ros::ok())
@@ -491,7 +590,7 @@ int main(int argc, char **argv)
       results_c3[i] += te_repeat.c3;
     }
 
-    cout << "\n\n\nAll Results:" << endl;
+    cout << "\n\n\nAll Results: (" << index << ")" << endl;
     cout << "(r, c1, c2, c3)" << endl;
     for (size_t i = 0; i < results_r.size(); i ++)
     {

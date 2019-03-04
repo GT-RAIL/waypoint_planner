@@ -11,6 +11,8 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   time_step = step;
   t_end = static_cast<size_t>(time_horizon / time_step);
 
+  output_file_modifier = "results";
+
   cout << "Setting time scale to end at time index: " << t_end << endl;
 
   loadTrajectory(move(trajectory_file_name));
@@ -68,10 +70,12 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   default_human_dims.z = 1.4;
 }
 
-void LPSolver::reset(double horizon, std::string trajectory_file_name)
+void LPSolver::reset(double horizon, std::string trajectory_file_name, string output_file_modifier)
 {
   time_horizon = horizon;
   t_end = static_cast<size_t>(time_horizon / time_step);
+
+  this->output_file_modifier = output_file_modifier;
 
   cout << "Setting time scale to end at time index: " << t_end << endl;
 
@@ -244,10 +248,33 @@ void LPSolver::constructModel(vector<double> total_costs)
   // maximize objective function
   set_maxim(lp);
 
+  // solver settings
+//  set_scaling(lp, SCALE_MEAN | SCALE_LOGARITHMIC | SCALE_INTEGERS);
+  set_scaling(lp, SCALE_MEAN | SCALE_INTEGERS);
+
   // note: all variables must be >= 0 by default, so this constraint doesn't have to be added
   cout << "LP model constructed successfully!" << endl;
 
 //  free(row);
+}
+
+void LPSolver::setScaling(int scaling_type)
+{
+  if (scaling_type == 0)
+  {
+//    set_scaling(lp, SCALE_MEAN | SCALE_LOGARITHMIC | SCALE_INTEGERS);
+    set_scaling(lp, SCALE_MEAN | SCALE_INTEGERS);
+  }
+  else if (scaling_type == 1)
+  {
+//    set_scaling(lp, SCALE_GEOMETRIC | SCALE_INTEGERS);
+    set_scaling(lp, SCALE_GEOMETRIC | SCALE_INTEGERS);
+  }
+  else
+  {
+//    set_scaling(lp, SCALE_CURTISREID | SCALE_INTEGERS);
+    set_scaling(lp, SCALE_RANGE | SCALE_LOGARITHMIC | SCALE_INTEGERS);
+  }
 }
 
 bool LPSolver::solveModel(double timeout)
@@ -268,18 +295,18 @@ bool LPSolver::solveModel(double timeout)
 
   cout << "Model finished, with code: " << success << endl;
   if (success != 0)
+  {
     return false;
+  }
 
-  free(lp);
-
-  constructModel(this->total_costs);
 
   cout << "Objective value: " << get_objective(lp) << endl;
 
   REAL constr_results[get_Nrows(lp)];
   get_constraints(lp, constr_results);
-  cout << "Constraint 1: " << constr_results[get_Nrows(lp) - 2] << endl;
-  cout << "Constraint 2: " << constr_results[get_Nrows(lp) - 1] << endl;
+  cout << "Constraint 1: " << constr_results[get_Nrows(lp) - 3] << endl;
+  cout << "Constraint 2: " << constr_results[get_Nrows(lp) - 2] << endl;
+  cout << "Constraint 3: " << constr_results[get_Nrows(lp) - 1] << endl;
 
   cout << "Retrieving results..." << endl;
   REAL vars[num_variables];
@@ -291,7 +318,7 @@ bool LPSolver::solveModel(double timeout)
     ys.push_back(vars[i]);
   }
   cout << "Writing results to file in current directory..." << endl;
-  std::ofstream var_file(ros::package::getPath("waypoint_planner") + "/config/var_results.txt");
+  std::ofstream var_file(ros::package::getPath("waypoint_planner") + "/config/var_" + output_file_modifier + ".txt");
   if (var_file.is_open())
   {
     for (int i = 0; i < num_variables; i++)
@@ -302,11 +329,12 @@ bool LPSolver::solveModel(double timeout)
   else
   {
     cout << "Could not open file.  Freeing up memory and returning." << endl;
+    freeModel();
     return false;
   }
 
   cout << "Results written.  Freeing up memory and returning." << endl;
-  free(lp);
+  freeModel();
 
 //  cout << "***********************************************\nnonzero values: " << endl;
 //  for (size_t n = 0; n < perch_states.size(); n ++)
@@ -327,6 +355,11 @@ bool LPSolver::solveModel(double timeout)
 //  cout << "***********************************************" << endl;
 
   return true;
+}
+
+void LPSolver::freeModel()
+{
+  free(lp);
 }
 
 void LPSolver::loadModel(string file_name)
@@ -410,7 +443,7 @@ Action LPSolver::getAction(PerchState s, size_t t)
   cout << "Getting action for time step " << t << ", waypoint " << waypointToIndex(s.waypoint)
        << " (perched: " << s.perched << ")..." << endl;
   size_t best_action_id = 0;
-//  double max_value = 0;
+  double max_value = 0;
   double sum = 0;
   vector<size_t> possible_actions;
   vector<double> ps;
@@ -425,7 +458,7 @@ Action LPSolver::getAction(PerchState s, size_t t)
         possible_actions.push_back(i);
         ps.push_back(test_value);
       }
-//      // Old code: deterministic action selection
+      // Old code: deterministic action selection
 //      if (test_value > max_value)
 //      {
 //        max_value = test_value;
@@ -475,6 +508,7 @@ Action LPSolver::getAction(PerchState s, size_t t)
   }
 
   cout << "Best action: " << str << mod << ", with probability " << selected_p << endl;
+//  cout << "Best action: " << str << mod << endl;
 
   return actions[best_action_id];
 }

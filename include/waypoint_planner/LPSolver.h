@@ -29,7 +29,11 @@ public:
 
   void constructModel(std::vector<double> total_costs);
 
+  void setScaling(int scaling_type);
+
   bool solveModel(double timeout);
+
+  void freeModel();
 
   void loadModel(std::string file_name);
 
@@ -37,7 +41,7 @@ public:
 
   Action getAction(PerchState s, size_t t);
 
-  void reset(double horizon, std::string trajectory_file_name);
+  void reset(double horizon, std::string trajectory_file_name, std::string output_file_modifier="results");
 
 private:
   std::vector<geometry_msgs::Point> waypoints;
@@ -46,6 +50,8 @@ private:
   std::vector<Action> actions;
   std::vector<double> ys;
   std::vector<double> total_costs;
+
+  std::string output_file_modifier;
 
   std::vector< std::vector< std::vector<size_t> > > index_map;  // index_map[state_id][time_step][action_id]=i for ys[i]
   size_t num_variables;
