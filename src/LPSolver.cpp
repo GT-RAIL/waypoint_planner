@@ -11,6 +11,8 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   time_step = step;
   t_end = static_cast<size_t>(time_horizon / time_step);
 
+  output_file_modifier = "results";
+
   cout << "Setting time scale to end at time index: " << t_end << endl;
 
   loadTrajectory(move(trajectory_file_name));
@@ -18,7 +20,13 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   cout << "Loaded " << waypoints.size() << " waypoints." << endl;
 
   // initialize list of states
-  for (size_t i = 0; i < waypoints.size(); i ++)
+  for (auto waypoint : waypoints)
+  {
+    perch_states.emplace_back(PerchState(waypoint, false));
+    perch_states.emplace_back(PerchState(waypoint, true));
+  }
+
+  for (size_t i = 0; i < perch_states.size(); i ++)
   {
     for (size_t j = 0; j <= t_end; j ++)
     {
@@ -35,8 +43,8 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   cout << "Constructing (s(t), a) list..." << endl;
 
   num_variables = 0;
-  index_map.resize(waypoints.size());
-  for (size_t i = 0; i < waypoints.size(); i ++)
+  index_map.resize(perch_states.size());
+  for (size_t i = 0; i < perch_states.size(); i ++)
   {
     index_map[i].resize(t_end + 1);
     for (size_t j = 0; j <= t_end; j ++)
@@ -60,6 +68,56 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   default_human_dims.x = 0.5;
   default_human_dims.y = 0.4;
   default_human_dims.z = 1.4;
+}
+
+void LPSolver::reset(double horizon, std::string trajectory_file_name, string output_file_modifier)
+{
+  time_horizon = horizon;
+  t_end = static_cast<size_t>(time_horizon / time_step);
+
+  this->output_file_modifier = output_file_modifier;
+
+  cout << "Setting time scale to end at time index: " << t_end << endl;
+
+  loadTrajectory(move(trajectory_file_name));
+
+  // initialize list of states
+
+  states.clear();
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    for (size_t j = 0; j <= t_end; j ++)
+    {
+      states.emplace_back(StateWithTime(i, j));
+    }
+  }
+
+  cout << "Initialized " << states.size() << " states." << endl;
+
+  cout << "Constructing (s(t), a) list..." << endl;
+
+  num_variables = 0;
+  index_map.resize(perch_states.size());
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    index_map[i].resize(t_end + 1);
+    for (size_t j = 0; j <= t_end; j ++)
+    {
+      index_map[i][j].resize(actions.size());
+      for (size_t k = 0; k < actions.size(); k ++)
+      {
+        if (isValidAction(i, k))
+        {
+          index_map[i][j][k] = num_variables;
+          num_variables ++;
+        }
+        else
+        {
+          index_map[i][j][k] = std::numeric_limits<size_t>::max();
+        }
+      }
+    }
+  }
 }
 
 void LPSolver::constructModel(vector<double> total_costs)
@@ -110,7 +168,7 @@ void LPSolver::constructModel(vector<double> total_costs)
     // left side (iterate over actions)
     for (size_t j = 0; j < actions.size(); j ++)
     {
-      if (isValidAction(states[i].waypoint_id, j))
+      if (isValidAction(states[i].state_id, j))
       {
         crow[getIndex(i, j) + 1] = 1;
       }
@@ -127,27 +185,27 @@ void LPSolver::constructModel(vector<double> total_costs)
 
       for (size_t k = 0; k < actions.size(); k ++)
       {
-        if (!isValidAction(states[j].waypoint_id, k))
+        if (!isValidAction(states[j].state_id, k))
         {
           continue;
         }
 
-        vector<geometry_msgs::Point> s_primes;
+        vector<PerchState> s_primes;
         vector<double> transition_ps;
-        SMDPFunctions::transitionModel(waypoints[states[j].waypoint_id], actions[k], s_primes, transition_ps);
+        SMDPFunctions::transitionModel(perch_states[states[j].state_id], actions[k], s_primes, transition_ps);
 
         // iterate through possible waypoint transitions to calculate T(s'|s,a) (without time)
         for (size_t l = 0; l < s_primes.size(); l++)
         {
-          if (states[i].waypoint_id != waypointToIndex(s_primes[l]))
+          if (states[i].state_id != perchStateToIndex(s_primes[l]))
             continue;
 
-          size_t t_waypoint_id = waypointToIndex(s_primes[l]);
-          double t_waypoint_p = transition_ps[l];
+          size_t t_state_id = perchStateToIndex(s_primes[l]);
+          double t_state_p = transition_ps[l];
 
           vector<double> dts;
           vector<double> dt_ps;
-          actions[k].duration(waypoints[states[j].waypoint_id], s_primes[l], dts, dt_ps);
+          actions[k].duration(perch_states[states[j].state_id].waypoint, s_primes[l].waypoint, dts, dt_ps);
           // iterate through possible time durations to fully calculate T(s'|s,a) (with time)
           for (size_t m = 0; m < dts.size(); m ++)
           {
@@ -155,7 +213,7 @@ void LPSolver::constructModel(vector<double> total_costs)
             if (states[i].time_index != t_time_id)
               continue;
 
-            double t_prob = t_waypoint_p*dt_ps[m];
+            double t_prob = t_state_p*dt_ps[m];
             if (t_time_id <= t_end && t_prob > 0)
             {
               crow[getIndex(j, k) + 1] -= t_prob;
@@ -167,7 +225,7 @@ void LPSolver::constructModel(vector<double> total_costs)
     }
 
     // define constant based on initial condition and add constraint
-    // TODO: for now, try only first waypoint as initial state... maybe try all t=0 as initial states in the future
+    // TODO: for now, try only first waypoint unperched as initial state... maybe try all t=0 as initial states in the future
     double b = 0;
     if (i == 0)
     {
@@ -182,11 +240,17 @@ void LPSolver::constructModel(vector<double> total_costs)
   cout << "Collision constraint added." << endl;
   costConstraint(SMDPFunctions::INTRUSION, this->total_costs[1]);
   cout << "Intrusion constraint added." << endl;
+  costConstraint(SMDPFunctions::POWER, this->total_costs[2]);
+  cout << "Power consumption constraint added." << endl;
 
   set_add_rowmode(lp, FALSE);
 
   // maximize objective function
   set_maxim(lp);
+
+  // solver settings
+//  set_scaling(lp, SCALE_MEAN | SCALE_LOGARITHMIC | SCALE_INTEGERS);
+  set_scaling(lp, SCALE_MEAN | SCALE_INTEGERS);
 
   // note: all variables must be >= 0 by default, so this constraint doesn't have to be added
   cout << "LP model constructed successfully!" << endl;
@@ -194,56 +258,67 @@ void LPSolver::constructModel(vector<double> total_costs)
 //  free(row);
 }
 
-void LPSolver::solveModel(double timeout)
+void LPSolver::setScaling(int scaling_type)
+{
+  if (scaling_type == 0)
+  {
+//    set_scaling(lp, SCALE_MEAN | SCALE_LOGARITHMIC | SCALE_INTEGERS);
+    set_scaling(lp, SCALE_MEAN | SCALE_INTEGERS);
+  }
+  else if (scaling_type == 1)
+  {
+//    set_scaling(lp, SCALE_GEOMETRIC | SCALE_INTEGERS);
+    set_scaling(lp, SCALE_GEOMETRIC | SCALE_INTEGERS);
+  }
+  else
+  {
+//    set_scaling(lp, SCALE_CURTISREID | SCALE_INTEGERS);
+    set_scaling(lp, SCALE_RANGE | SCALE_LOGARITHMIC | SCALE_INTEGERS);
+  }
+}
+
+bool LPSolver::solveModel(double timeout)
 {
   int suboptimal_solutions = 0;
   int total_attempts = 0;
 
-  bool finished = false;
+  set_timeout(lp, timeout);
 
-  while (!finished)
+  total_attempts ++;
+
+  cout << "Simplifying model for linearly dependent rows..." << endl;
+//  set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_LINDEP, get_presolveloops(lp));
+  cout << "Simplification complete." << endl;
+
+  cout << "Attempting to solve model..." << endl;
+  int success = solve(lp);
+
+  cout << "Model finished, with code: " << success << endl;
+  if (success != 0)
   {
-    set_timeout(lp, timeout);
-
-    total_attempts ++;
-
-    cout << "Simplifying model for linearly dependent rows..." << endl;
-//    set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_LINDEP, get_presolveloops(lp));
-    cout << "Simplification complete." << endl;
-
-    cout << "Attempting to solve model..." << endl;
-    int success = solve(lp);
-
-    cout << "Model finished, with code: " << success << endl;
-    if (success == 1)
-      suboptimal_solutions ++;
-    cout << "Current progress: " << suboptimal_solutions << "/" << total_attempts << endl;
-    cout << endl;
-    if (success == 0)
-      break;
-
-    free(lp);
-
-    constructModel(this->total_costs);
+    return false;
   }
+
 
   cout << "Objective value: " << get_objective(lp) << endl;
 
   REAL constr_results[get_Nrows(lp)];
   get_constraints(lp, constr_results);
-  cout << "Constraint 1: " << constr_results[get_Nrows(lp) - 2] << endl;
-  cout << "Constraint 2: " << constr_results[get_Nrows(lp) - 1] << endl;
+  cout << "Constraint 1: " << constr_results[get_Nrows(lp) - 3] << endl;
+  cout << "Constraint 2: " << constr_results[get_Nrows(lp) - 2] << endl;
+  cout << "Constraint 3: " << constr_results[get_Nrows(lp) - 1] << endl;
 
   cout << "Retrieving results..." << endl;
   REAL vars[num_variables];
   get_variables(lp, vars);
   cout << "Copying results to this object for future use..." << endl;
+  ys.clear();
   for (int i = 0; i < num_variables; i++)
   {
     ys.push_back(vars[i]);
   }
   cout << "Writing results to file in current directory..." << endl;
-  std::ofstream var_file(ros::package::getPath("waypoint_planner") + "/config/var_results.txt");
+  std::ofstream var_file(ros::package::getPath("waypoint_planner") + "/config/var_" + output_file_modifier + ".txt");
   if (var_file.is_open())
   {
     for (int i = 0; i < num_variables; i++)
@@ -254,28 +329,37 @@ void LPSolver::solveModel(double timeout)
   else
   {
     cout << "Could not open file.  Freeing up memory and returning." << endl;
-    return;
+    freeModel();
+    return false;
   }
 
   cout << "Results written.  Freeing up memory and returning." << endl;
-  free(lp);
+  freeModel();
 
-  cout << "***********************************************\nnonzero values: " << endl;
-  for (size_t n = 0; n < waypoints.size(); n ++)
-  {
-    for (size_t i = 0; i < t_end + 1; i++)
-    {
-      for (size_t j = 0; j < actions.size(); j++)
-      {
-        if (isValidAction(n, j))
-        {
-          if (ys[getIndex(n, i, j)] > 0.00001)
-            cout << "\tw" << n << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
-        }
-      }
-    }
-  }
-  cout << "***********************************************" << endl;
+//  cout << "***********************************************\nnonzero values: " << endl;
+//  for (size_t n = 0; n < perch_states.size(); n ++)
+//  {
+//    for (size_t i = 0; i < t_end + 1; i++)
+//    {
+//      for (size_t j = 0; j < actions.size(); j++)
+//      {
+//        if (isValidAction(n, j))
+//        {
+//          if (ys[getIndex(n, i, j)] > 0.00001)
+//            cout << "\tw" << waypointToIndex(perch_states[n].waypoint) << "-" << perch_states[n].perched
+//               << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
+//        }
+//      }
+//    }
+//  }
+//  cout << "***********************************************" << endl;
+
+  return true;
+}
+
+void LPSolver::freeModel()
+{
+  free(lp);
 }
 
 void LPSolver::loadModel(string file_name)
@@ -291,22 +375,23 @@ void LPSolver::loadModel(string file_name)
       ys.push_back(atof(line.c_str()));
     }
     model_file.close();
-    cout << "***********************************************\nnonzero values: " << endl;
-    for (size_t n = 0; n < waypoints.size(); n ++)
-    {
-      for (size_t i = 0; i < t_end + 1; i++)
-      {
-        for (size_t j = 0; j < actions.size(); j++)
-        {
-          if (isValidAction(n, j))
-          {
-            if (ys[getIndex(n, i, j)] > 0.00001)
-              cout << "\tw" << n << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
-          }
-        }
-      }
-    }
-    cout << "***********************************************" << endl;
+//    cout << "***********************************************\nnonzero values: " << endl;
+//    for (size_t n = 0; n < perch_states.size(); n ++)
+//    {
+//      for (size_t i = 0; i < t_end + 1; i++)
+//      {
+//        for (size_t j = 0; j < actions.size(); j++)
+//        {
+//          if (isValidAction(n, j))
+//          {
+//            if (ys[getIndex(n, i, j)] > 0.00001)
+//              cout << "\tw" << waypointToIndex(perch_states[n].waypoint) << "-" << perch_states[n].perched
+//                << "(" << i << "), a" << j << ": " << ys[getIndex(n, i, j)] << endl;
+//          }
+//        }
+//      }
+//    }
+//    cout << "***********************************************" << endl;
     cout << "LP solution loaded." << endl;
   }
 }
@@ -323,7 +408,7 @@ void LPSolver::costConstraint(uint8_t mode, double threshold)
   {
     for (size_t j = 0; j < actions.size(); j ++)
     {
-      if (isValidAction(states[i].waypoint_id, j))
+      if (isValidAction(states[i].state_id, j))
       {
         crow[getIndex(i, j) + 1] = reward(i, j, mode);
       }
@@ -347,32 +432,33 @@ void LPSolver::loadWaypoints(string file_name)
   EnvironmentSetup::readWaypoints(waypoint_file_path, waypoints);
 }
 
-Action LPSolver::getAction(geometry_msgs::Point s, double t)
+Action LPSolver::getAction(PerchState s, double t)
 {
   return getAction(s, static_cast<size_t>(t / time_step));
 }
 
-Action LPSolver::getAction(geometry_msgs::Point s, size_t t)
+Action LPSolver::getAction(PerchState s, size_t t)
 {
-  size_t waypoint_id = waypointToIndex(s);
-  cout << "Getting action for time step " << t << ", waypoint " << waypoint_id << "..." << endl;
+  size_t state_id = perchStateToIndex(s);
+  cout << "Getting action for time step " << t << ", waypoint " << waypointToIndex(s.waypoint)
+       << " (perched: " << s.perched << ")..." << endl;
   size_t best_action_id = 0;
-//  double max_value = 0;
+  double max_value = 0;
   double sum = 0;
   vector<size_t> possible_actions;
   vector<double> ps;
   for (size_t i = 0; i < actions.size(); i ++)
   {
-    if (isValidAction(waypoint_id, i))
+    if (isValidAction(state_id, i))
     {
-      double test_value = ys[getIndex(waypoint_id, t, i)];
+      double test_value = ys[getIndex(state_id, t, i)];
       if (test_value > 0)
       {
         sum += test_value;
         possible_actions.push_back(i);
         ps.push_back(test_value);
       }
-//      // Old code: deterministic action selection
+      // Old code: deterministic action selection
 //      if (test_value > max_value)
 //      {
 //        max_value = test_value;
@@ -405,6 +491,14 @@ Action LPSolver::getAction(geometry_msgs::Point s, size_t t)
   string mod;
   if (actions[best_action_id].actionType() == Action::OBSERVE)
     str = "Observe";
+  else if (actions[best_action_id].actionType() == Action::PERCH)
+  {
+    str = "Perch";
+  }
+  else if (actions[best_action_id].actionType() == Action::PERCH)
+  {
+    str = "Unperch";
+  }
   else
   {
     str = "Move";
@@ -414,21 +508,35 @@ Action LPSolver::getAction(geometry_msgs::Point s, size_t t)
   }
 
   cout << "Best action: " << str << mod << ", with probability " << selected_p << endl;
+//  cout << "Best action: " << str << mod << endl;
 
   return actions[best_action_id];
 }
 
-size_t LPSolver::getIndex(size_t waypoint_id, size_t t, size_t action_id)
+size_t LPSolver::getIndex(size_t perch_state_id, size_t t, size_t action_id)
 {
-  return index_map[waypoint_id][t][action_id];
+  return index_map[perch_state_id][t][action_id];
 }
 
 size_t LPSolver::getIndex(size_t state_id, size_t action_id)
 {
-  return getIndex(states[state_id].waypoint_id, states[state_id].time_index, action_id);
+  return getIndex(states[state_id].state_id, states[state_id].time_index, action_id);
 }
 
 // TODO: better lookup (hash waypoints to indices maybe?)
+size_t LPSolver::perchStateToIndex(PerchState s)
+{
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    if (perch_states[i].perched == s.perched && perch_states[i].waypoint.x == s.waypoint.x
+        && perch_states[i].waypoint.y == s.waypoint.y && perch_states[i].waypoint.z == s.waypoint.z)
+    {
+      return i;
+    }
+  }
+  return perch_states.size();  // error case, waypoint not found in list
+}
+
 size_t LPSolver::waypointToIndex(geometry_msgs::Point w)
 {
   for (size_t i = 0; i < waypoints.size(); i ++)
@@ -443,15 +551,13 @@ size_t LPSolver::waypointToIndex(geometry_msgs::Point w)
 
 double LPSolver::reward(size_t state_id, size_t action_id, uint8_t mode)
 {
-  return SMDPFunctions::reward(State(waypoints[states[state_id].waypoint_id],
+  return SMDPFunctions::reward(State(perch_states[states[state_id].state_id].waypoint,
+                                     perch_states[states[state_id].state_id].perched,
                                      trajectory.getPose(states[state_id].time_index*time_step)),
                                actions[action_id], mode);
 }
 
-bool LPSolver::isValidAction(size_t waypoint_id, size_t action_id)
+bool LPSolver::isValidAction(size_t state_id, size_t action_id)
 {
-  return !(actions[action_id].actionType() == Action::MOVE
-    && waypoints[waypoint_id].x == actions[action_id].actionGoal().x
-    && waypoints[waypoint_id].y == actions[action_id].actionGoal().y
-    && waypoints[waypoint_id].z == actions[action_id].actionGoal().z);
+  return SMDPFunctions::isValidAction(perch_states[state_id], actions[action_id]);
 }

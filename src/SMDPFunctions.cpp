@@ -15,9 +15,9 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
   default_human_dims.y = 0.4;
   default_human_dims.z = 1.4;
 
-  vector<geometry_msgs::Point> s_primes;
+  vector<PerchState> s_primes;
   vector<double> transition_probabilities;
-  transitionModel(s.robotPose(), a, s_primes, transition_probabilities);
+  transitionModel(PerchState(s.robotPose(), s.isPerched()), a, s_primes, transition_probabilities);
 
   double r = 0;
 
@@ -26,7 +26,7 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
     vector<double> durations;
     vector<double> probabilities;
 
-    a.duration(s.robotPose(), s_primes[i], durations, probabilities);
+    a.duration(s.robotPose(), s_primes[i].waypoint, durations, probabilities);
 
     double r2 = 0;
     for (size_t j = 0; j < durations.size(); j++)
@@ -44,20 +44,49 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
                   * durations[j];
           break;
           case INTRUSION:
-            r2 += probabilities[j] * RewardsAndCosts::cost_intrusion(s.humanPose(), s.robotPose()) * durations[j];
+            r2 += probabilities[j] * RewardsAndCosts::cost_intrusion(s.humanPose(), s.robotPose(), s.isPerched())
+                * durations[j];
           break;
           case POWER:
-            r2 += probabilities[j] * 0 * durations[j];
+            r2 += probabilities[j] * RewardsAndCosts::cost_power(s.isPerched(), a) * durations[j];
           break;
           case LINEARIZED_COST:
-            r2 += probabilities[j] * linearizedCost(s.humanPose(), default_human_dims, s.robotPose(), weights)
-                * durations[j];
+            r2 += probabilities[j] * linearizedCost(s.humanPose(), default_human_dims, s.robotPose(), s.isPerched(), a,
+                weights) * durations[j];
           break;
         }
       }
-      else
+      else if (a.actionType() == Action::PERCH || a.actionType() == Action::UNPERCH)
       {
-        r2 += probabilities[j] * 0 * durations[j];  //TODO: reward/cost while in transit? (currently set to 0)
+        switch (mode)
+        {
+          case COLLISION:
+            r2 += probabilities[j] * RewardsAndCosts::cost_collision(s.humanPose(), default_human_dims, s.robotPose())
+                  * durations[j];
+            break;
+          case INTRUSION:
+            r2 += probabilities[j] * RewardsAndCosts::cost_intrusion(s.humanPose(), s.robotPose(), s.isPerched())
+                  * durations[j];
+            break;
+          case POWER:r2 += probabilities[j] * RewardsAndCosts::cost_power(s.isPerched(), a) * durations[j];
+            break;
+          case LINEARIZED_COST:
+            r2 += probabilities[j] * linearizedCost(s.humanPose(), default_human_dims, s.robotPose(), s.isPerched(), a,
+                                                    weights) * durations[j];
+            break;
+        }
+      }
+      else if (a.actionType() == Action::MOVE)
+      {
+        switch (mode)
+        {
+          case POWER:r2 += probabilities[j] * RewardsAndCosts::cost_power(s.isPerched(), a) * durations[j];
+            break;
+          case LINEARIZED_COST:
+            r2 += probabilities[j] * linearizedCost(s.humanPose(), default_human_dims, s.robotPose(), s.isPerched(), a,
+                                                    weights) * durations[j];
+            break;
+        }
       }
     }
 
@@ -67,21 +96,33 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
   return r;
 }
 
-void SMDPFunctions::transitionModel(geometry_msgs::Point s, Action a, vector<geometry_msgs::Point> &s_primes,
-    vector<double> &probabilities)
+void SMDPFunctions::transitionModel(PerchState s, Action a, vector<PerchState> &s_primes, vector<double> &probabilities)
 {
-  geometry_msgs::Point s_prime;
-  if (a.actionType() == Action::OBSERVE)
+  PerchState s_prime;
+  if (a.actionType() == Action::MOVE)
   {
-    s_prime.x = s.x;
-    s_prime.y = s.y;
-    s_prime.z = s.z;
+    s_prime.waypoint.x = a.actionGoal().x;
+    s_prime.waypoint.y = a.actionGoal().y;
+    s_prime.waypoint.z = a.actionGoal().z;
+    s_prime.perched = false;
   }
   else
   {
-    s_prime.x = a.actionGoal().x;
-    s_prime.y = a.actionGoal().y;
-    s_prime.z = a.actionGoal().z;
+    s_prime.waypoint.x = s.waypoint.x;
+    s_prime.waypoint.y = s.waypoint.y;
+    s_prime.waypoint.z = s.waypoint.z;
+    if (a.actionType() == Action::PERCH)
+    {
+      s_prime.perched = true;
+    }
+    else if (a.actionType() == Action::UNPERCH)
+    {
+      s_prime.perched = false;
+    }
+    else
+    {
+      s_prime.perched = s.perched;
+    }
   }
 
   s_primes.push_back(s_prime);
@@ -89,19 +130,46 @@ void SMDPFunctions::transitionModel(geometry_msgs::Point s, Action a, vector<geo
 }
 
 double SMDPFunctions::linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vector3 human_dims, geometry_msgs::Point r,
-    vector<double> weights)
+    bool perched, Action a, vector<double> weights)
 {
-  return weights[0]*RewardsAndCosts::reward_recognition(h, human_dims, r)
-         - weights[1]*RewardsAndCosts::cost_collision(h, human_dims, r)
-         - weights[2]*RewardsAndCosts::cost_intrusion(h, r);
+  if (a.actionType() == Action::OBSERVE)
+  {
+    return weights[0] * RewardsAndCosts::reward_recognition(h, human_dims, r)
+           + weights[1] * RewardsAndCosts::cost_collision(h, human_dims, r)
+           + weights[2] * RewardsAndCosts::cost_intrusion(h, r, perched)
+           + weights[3] * RewardsAndCosts::cost_power(perched, a);
+  }
+  else if (a.actionType() == Action::PERCH || a.actionType() == Action::UNPERCH)
+  {
+    return weights[1] * RewardsAndCosts::cost_collision(h, human_dims, r)
+           + weights[2] * RewardsAndCosts::cost_intrusion(h, r, perched)
+           + weights[3] * RewardsAndCosts::cost_power(perched, a);
+  }
+  else if (a.actionType() == Action::MOVE)
+  {
+    return weights[3] * RewardsAndCosts::cost_power(perched, a);
+  }
 }
 
 void SMDPFunctions::initializeActions(vector<geometry_msgs::Point> waypoints, vector<Action> &actions)
 {
   actions.clear();
   actions.emplace_back(Action(Action::OBSERVE));
+  actions.emplace_back(Action(Action::PERCH));
+  actions.emplace_back(Action(Action::UNPERCH));
   for (auto& waypoint : waypoints)
   {
     actions.emplace_back(Action(Action::MOVE, waypoint));
   }
+}
+
+bool SMDPFunctions::isValidAction(PerchState s, Action a)
+{
+  return (a.actionType() == Action::PERCH && !s.perched)
+         || (a.actionType() == Action::UNPERCH && s.perched)
+         || (a.actionType() == Action::MOVE && !s.perched
+             && !(s.waypoint.x == a.actionGoal().x
+                  && s.waypoint.y == a.actionGoal().y
+                  && s.waypoint.z == a.actionGoal().z))
+         || (a.actionType() == Action::OBSERVE);
 }

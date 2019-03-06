@@ -7,6 +7,9 @@
 #include <tf2_bullet/tf2_bullet.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
+#include "waypoint_planner/PerchState.h"
+#include "waypoint_planner/Action.h"
+
 
 /*
  * Assumptions:
@@ -22,7 +25,9 @@ public:
   static double cost_collision(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims,
       geometry_msgs::Point r);
 
-  static double cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r);
+  static double cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r, bool perched);
+
+  static double cost_power(bool perched, Action a);
 
   static double reward_recognition(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims,
       geometry_msgs::Point r);

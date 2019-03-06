@@ -10,7 +10,7 @@ double RewardsAndCosts::cost_collision(geometry_msgs::Pose h, geometry_msgs::Vec
   btTransform t_h(btQuaternion(h.orientation.x, h.orientation.y, h.orientation.z, h.orientation.w),
                   btVector3(h.position.x, h.position.y, h.position.z));
   btVector3 r_point(r.x, r.y, r.z);
-  btVector3 half_dims(h_dims.x/2.0, h_dims.y/2.0, h_dims.z/2.0);
+  btVector3 half_dims(h_dims.x/2.0 + .125, h_dims.y/2.0 + .125, h_dims.z/2.0 + .125); // add robot radius of .125
 
   // transform robot point into human coordinate frame
   btVector3 r_h = t_h.inverse()*r_point;
@@ -24,7 +24,7 @@ double RewardsAndCosts::cost_collision(geometry_msgs::Pose h, geometry_msgs::Vec
   return exp(-10*dst);
 }
 
-double RewardsAndCosts::cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r)
+double RewardsAndCosts::cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Point r, bool perched)
 {
   // convert ROS messages to bullet types
   btTransform t_h(btQuaternion(h.orientation.x, h.orientation.y, h.orientation.z, h.orientation.w),
@@ -36,10 +36,44 @@ double RewardsAndCosts::cost_intrusion(geometry_msgs::Pose h, geometry_msgs::Poi
   btVector3 head = t_h*h_point;
 
   // intrusiveness cost as an inverse distance from robot to head
-  // TODO: lower when perched?
   double dst = (r_point - head).length();
 
-  return exp(-dst);
+  // TODO: lower cost when perched?
+  if (perched)
+  {
+    return 0.5*exp(-dst);
+  }
+  else
+  {
+    return exp(-dst);
+  }
+}
+
+double RewardsAndCosts::cost_power(bool perched, Action a)
+{
+  if (a.actionType() == Action::OBSERVE)
+  {
+    if (perched)
+    {
+      return 0.125;
+    }
+    else
+    {
+      return 0.25;
+    }
+  }
+  else if (a.actionType() == Action::PERCH)
+  {
+    return 0.5;
+  }
+  else if (a.actionType() == Action::UNPERCH)
+  {
+    return 0.5;
+  }
+  else
+  {
+    return 1.0;
+  }
 }
 
 double RewardsAndCosts::reward_recognition(geometry_msgs::Pose h, geometry_msgs::Vector3 h_dims, geometry_msgs::Point r)

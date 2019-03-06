@@ -310,7 +310,7 @@ void WaypointTester::calculate_costs()
       waypoints[current_waypoint], point_detections));
   ROS_INFO("\tCollision cost: %f", RewardsAndCosts::cost_collision(human_pose.pose, human_dims,
       waypoints[current_waypoint]));
-  ROS_INFO("\tIntrusion cost: %f", RewardsAndCosts::cost_intrusion(human_pose.pose, waypoints[current_waypoint]));
+  ROS_INFO("\tIntrusion cost: %f", RewardsAndCosts::cost_intrusion(human_pose.pose, waypoints[current_waypoint], false));
 
   for (unsigned int i = 1; i < im.controls[0].markers.size() - 1; i ++)
   {

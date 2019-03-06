@@ -2,6 +2,8 @@
 
 const uint8_t Action::OBSERVE = 0;
 const uint8_t Action::MOVE = 1;
+const uint8_t Action::PERCH = 2;
+const uint8_t Action::UNPERCH = 3;
 
 using std::vector;
 
@@ -41,7 +43,12 @@ void Action::duration(geometry_msgs::Point s1, geometry_msgs::Point s2, vector<d
 {
   if (action_type == OBSERVE)
   {
-    durations.push_back(1.0);
+    durations.push_back(2.0);
+    probabilities.push_back(1.0);
+  }
+  else if (action_type == PERCH || action_type == UNPERCH)
+  {
+    durations.push_back(2.0);
     probabilities.push_back(1.0);
   }
   else

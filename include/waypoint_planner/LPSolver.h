@@ -11,6 +11,7 @@
 #include "waypoint_planner/Action.h"
 #include "waypoint_planner/EnvironmentSetup.h"
 #include "waypoint_planner/HumanTrajectory.h"
+#include "waypoint_planner/PerchState.h"
 #include "waypoint_planner/RewardsAndCosts.h"
 #include "waypoint_planner/SMDPFunctions.h"
 #include "waypoint_planner/State.h"
@@ -28,20 +29,29 @@ public:
 
   void constructModel(std::vector<double> total_costs);
 
-  void solveModel(double timeout);
+  void setScaling(int scaling_type);
+
+  bool solveModel(double timeout);
+
+  void freeModel();
 
   void loadModel(std::string file_name);
 
-  Action getAction(geometry_msgs::Point s, double t);
+  Action getAction(PerchState s, double t);
 
-  Action getAction(geometry_msgs::Point s, size_t t);
+  Action getAction(PerchState s, size_t t);
+
+  void reset(double horizon, std::string trajectory_file_name, std::string output_file_modifier="results");
 
 private:
   std::vector<geometry_msgs::Point> waypoints;
+  std::vector<PerchState> perch_states;
   std::vector<StateWithTime> states;
   std::vector<Action> actions;
   std::vector<double> ys;
   std::vector<double> total_costs;
+
+  std::string output_file_modifier;
 
   std::vector< std::vector< std::vector<size_t> > > index_map;  // index_map[state_id][time_step][action_id]=i for ys[i]
   size_t num_variables;
@@ -59,9 +69,11 @@ private:
 
   geometry_msgs::Vector3 default_human_dims;
 
-  size_t getIndex(size_t waypoint_id, size_t t, size_t action_id);
+  size_t getIndex(size_t perch_state_id, size_t t, size_t action_id);
 
   size_t getIndex(size_t state_id, size_t action_id);
+
+  size_t perchStateToIndex(PerchState s);
 
   size_t waypointToIndex(geometry_msgs::Point w);
 
@@ -69,7 +81,7 @@ private:
 
   void costConstraint(uint8_t mode, double threshold);
 
-  bool isValidAction(size_t waypoint_id, size_t action_id);
+  bool isValidAction(size_t state_id, size_t action_id);
 };
 
 #endif  // WAYPOINT_PLANNER_LP_SOLVER_H_

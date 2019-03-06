@@ -7,6 +7,7 @@
 #include <waypoint_planner/State.h>
 #include <waypoint_planner/Action.h>
 
+#include "waypoint_planner/PerchState.h"
 #include "waypoint_planner/RewardsAndCosts.h"
 
 class SMDPFunctions
@@ -20,13 +21,15 @@ public:
 
   static double reward(State s, Action a, uint8_t mode=REWARD, std::vector<double> weights={});
 
-  static void transitionModel(geometry_msgs::Point s, Action a, std::vector<geometry_msgs::Point> &s_primes,
+  static void transitionModel(PerchState s, Action a, std::vector<PerchState> &s_primes,
       std::vector<double> &probabilities);
 
   static double linearizedCost(geometry_msgs::Pose h, geometry_msgs::Vector3 human_dims, geometry_msgs::Point r,
-      std::vector<double> weights);
+      bool perched, Action a, std::vector<double> weights);
 
   static void initializeActions(std::vector<geometry_msgs::Point> waypoints, std::vector<Action> &actions);
+
+  static bool isValidAction(PerchState s, Action a);
 };
 
 #endif  // WAYPOINT_PLANNER_SMDP_FUNCTIONS_H_

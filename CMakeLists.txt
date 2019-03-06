@@ -61,7 +61,7 @@ include_directories(include
 )
 
 add_executable(waypoint_planner
-  src/WaypointPlanner.cpp src/RewardsAndCosts.cpp
+  src/WaypointPlanner.cpp src/RewardsAndCosts.cpp src/Action.cpp
 )
 target_link_libraries(waypoint_planner
   ${catkin_LIBRARIES}
@@ -69,7 +69,7 @@ target_link_libraries(waypoint_planner
 )
 
 add_executable(waypoint_tester
-  src/WaypointTester.cpp src/RewardsAndCosts.cpp src/EnvironmentSetup.cpp src/HumanTrajectory.cpp
+  src/WaypointTester.cpp src/RewardsAndCosts.cpp src/EnvironmentSetup.cpp src/HumanTrajectory.cpp src/Action.cpp
 )
 target_link_libraries(waypoint_tester
   ${catkin_LIBRARIES}
@@ -103,6 +103,13 @@ target_link_libraries(trajectory_setter
   yaml-cpp
 )
 
+add_executable(time_sampler
+  src/TimeSampler.cpp
+)
+target_link_libraries(time_sampler
+  ${catkin_LIBRARIES}
+)
+
 add_executable(test_node
   src/TestNode.cpp
   src/State.cpp
@@ -123,8 +130,10 @@ add_executable(test_executor
   src/RewardsAndCosts.cpp
   src/SMDPFunctions.cpp
   src/StateWithTime.cpp
-  src/MCTSSolver.cpp
+#  src/MCTSSolver.cpp
   src/MCTSRewardSolver.cpp
+  src/MCTSScalarizedSolver.cpp
+  src/PerchState.cpp
 )
 add_dependencies(
   test_executor
