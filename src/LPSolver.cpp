@@ -7,6 +7,7 @@ using std::endl;
 
 LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, string waypoint_file_name)
 {
+  t0 = 0;
   time_horizon = horizon;
   time_step = step;
   t_end = static_cast<size_t>(time_horizon / time_step);
@@ -72,6 +73,7 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
 
 void LPSolver::reset(double horizon, std::string trajectory_file_name, string output_file_modifier)
 {
+  t0 = 0;
   time_horizon = horizon;
   t_end = static_cast<size_t>(time_horizon / time_step);
 
@@ -120,7 +122,58 @@ void LPSolver::reset(double horizon, std::string trajectory_file_name, string ou
   }
 }
 
+void LPSolver::resolve(double horizon, double step, size_t t0)
+{
+  time_horizon = horizon;
+  this->t0 = t0;
+  t_end = t0 + static_cast<size_t>(time_horizon / time_step);
+
+  cout << "Setting time scale to end at time index: " << t_end << endl;
+
+  // initialize list of states
+  states.clear();
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    for (size_t j = t0; j <= t_end; j ++)
+    {
+      states.emplace_back(StateWithTime(i, j));
+    }
+  }
+
+  cout << "Initialized " << states.size() << " states." << endl;
+
+  cout << "Constructing (s(t), a) list..." << endl;
+
+  num_variables = 0;
+  index_map.resize(perch_states.size());
+  for (size_t i = 0; i < perch_states.size(); i ++)
+  {
+    index_map[i].resize((t_end - t0) + 1);
+    for (size_t j = t0; j <= t_end; j ++)
+    {
+      index_map[i][j-t0].resize(actions.size());
+      for (size_t k = 0; k < actions.size(); k ++)
+      {
+        if (isValidAction(i, k))
+        {
+          index_map[i][j-t0][k] = num_variables;
+          num_variables ++;
+        }
+        else
+        {
+          index_map[i][j-t0][k] = std::numeric_limits<size_t>::max();
+        }
+      }
+    }
+  }
+}
+
 void LPSolver::constructModel(vector<double> total_costs)
+{
+  constructModel(move(total_costs), PerchState(waypoints[0], false));
+}
+
+void LPSolver::constructModel(vector<double> total_costs, PerchState s0)
 {
   this->total_costs.clear();
   for (unsigned int i = 0; i < total_costs.size(); i ++)
@@ -153,6 +206,7 @@ void LPSolver::constructModel(vector<double> total_costs)
   // state occupancy constraints
   cout << "Calculating state occupancy constraints for " << states.size() << " states..." << endl;
   int updated = 0;
+  size_t s0_i = perchStateToIndex(s0);
   for (size_t i = 0; i < states.size(); i ++)
   {
     if (i < 5 || i % 100 == 0)
@@ -225,9 +279,9 @@ void LPSolver::constructModel(vector<double> total_costs)
     }
 
     // define constant based on initial condition and add constraint
-    // TODO: for now, try only first waypoint unperched as initial state... maybe try all t=0 as initial states in the future
+    // TODO: for now, try only given perch state as initial state...
     double b = 0;
-    if (i == 0)
+    if (i == s0_i)
     {
       b = 1;
     }
@@ -515,7 +569,7 @@ Action LPSolver::getAction(PerchState s, size_t t)
 
 size_t LPSolver::getIndex(size_t perch_state_id, size_t t, size_t action_id)
 {
-  return index_map[perch_state_id][t][action_id];
+  return index_map[perch_state_id][t - t0][action_id];
 }
 
 size_t LPSolver::getIndex(size_t state_id, size_t action_id)

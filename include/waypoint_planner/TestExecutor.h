@@ -22,9 +22,13 @@ public:
     static const uint8_t MCTS_SCALARIZED;
 
     TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode,
-        std::vector<double> weights, size_t search_depth, std::string trajectory_file);
+        std::vector<double> weights, size_t search_depth, std::string trajectory_file,
+        bool lp_resolve = false, double resolve_horizon = 30);
 
-    bool reset(double horizon, std::string trajectory_file, std::string lp_model="results");
+    bool reset(double horizon, std::string trajectory_file, std::string lp_model="results", bool solve = true);
+
+    // resolve LP from current time step and state
+    bool resolve();
 
     bool run(double sim_step);
 
@@ -52,6 +56,8 @@ private:
   MCTSRewardSolver mcts_reward_solver;
   MCTSScalarizedSolver mcts_scalarized_solver;
 
+  bool lp_resolve;
+
   double c1_hat;
   double c2_hat;
   double c3_hat;
@@ -61,6 +67,7 @@ private:
   double time_step;
   double current_time;
   double next_decision;
+  double resolve_horizon;
 
   double search_depth_time;
 

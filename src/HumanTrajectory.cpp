@@ -18,7 +18,7 @@ void HumanTrajectory::sortKeys()
 
 void HumanTrajectory::interpolate(double step)
 {
-  for (unsigned int i = 0; i < keys.size() - 2; i ++)
+  for (unsigned int i = 0; i < keys.size() - 1; i ++)
   {
     if (!comparePoses(trajectory[keys[i]], trajectory[keys[i + 1]]))
     {

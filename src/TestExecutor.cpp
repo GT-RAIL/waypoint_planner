@@ -12,7 +12,7 @@ const uint8_t TestExecutor::MCTS_CONSTRAINED = 3;
 const uint8_t TestExecutor::MCTS_SCALARIZED = 4;
 
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
-    size_t search_depth, string trajectory_file) :
+    size_t search_depth, string trajectory_file, bool lp_resolve, double resolve_horizon) :
     solver(horizon, step, mode, trajectory_file, "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
     lp_solver(horizon, step, trajectory_file, "iss_waypoints.csv"),    // TODO: parameters here for optional values
 //    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
@@ -74,6 +74,8 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   next_decision = 0;
   time_step = step;
   search_depth_time = search_depth*time_step;
+  this->resolve_horizon = resolve_horizon;
+  this->lp_resolve = lp_resolve;
 
   if (this->approach == MCTS_CONSTRAINED)
   {
@@ -117,7 +119,7 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   robot_marker.color.a = 1.0;
 }
 
-bool TestExecutor::reset(double horizon, string trajectory_file, string lp_model)
+bool TestExecutor::reset(double horizon, string trajectory_file, string lp_model, bool solve)
 {
   if (approach == TestExecutor::SMDP)
   {
@@ -178,9 +180,106 @@ bool TestExecutor::reset(double horizon, string trajectory_file, string lp_model
   robot_marker.color.b = 1.0;
   robot_marker.color.a = 1.0;
 
+  if (solve)
+  {
+    if (this->approach == LP_SOLVE)
+    {
+      lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
+      if (!lp_solver.solveModel(1200))  // solver timeout (s) before restarting
+      {
+        return false;
+      }
+      ROS_INFO("LP model solved.");
+    }
+    else if (this->approach == LP_LOAD)
+    {
+      lp_solver.loadModel("var_" + lp_model + ".txt");
+      ROS_INFO("LP model loaded.");
+    }
+    else if (this->approach == SMDP)
+    {
+      solver.backwardsInduction();
+      ROS_INFO("Policy computed.");
+    }
+
+    if (this->approach == MCTS_CONSTRAINED)
+    {
+      //time-scaling for non-full-depth searches
+      double time_scaling = search_depth_time / (time_horizon - current_time);
+      if (time_scaling > 1.0)
+      {
+        time_scaling = 1.0;
+      }
+
+      mcts_reward_solver.setConstraints({time_scaling * c1_hat, time_scaling * c2_hat, time_scaling * c3_hat});
+    }
+  }
+
+  return true;
+}
+
+bool TestExecutor::resolve()
+{
+  size_t t0 = static_cast<size_t>(current_time / time_step);
+  if (current_time + resolve_horizon > time_horizon)
+  {
+    ROS_INFO("Within window, no need to resolve.");
+    return true;
+  }
+
+  if (approach == TestExecutor::SMDP)
+  {
+//    solver.reset(horizon, trajectory_file);
+  }
+  else if (approach == TestExecutor::LP_SOLVE || approach == TestExecutor::LP_LOAD)
+  {
+    lp_solver.resolve(resolve_horizon, time_step, t0);
+  }
+  else if (approach == TestExecutor::MCTS_CONSTRAINED)
+  {
+//    mcts_reward_solver.reset(horizon, trajectory_file, weights);
+  }
+  else if (approach == TestExecutor::MCTS_SCALARIZED)
+  {
+//    mcts_scalarized_solver.reset(horizon, trajectory_file);
+  }
+
+//  if (approach == TestExecutor::MCTS_CONSTRAINED)
+//  {
+//    c1_hat = weights[0];
+//    c2_hat = weights[1];
+//    c3_hat = weights[2];
+//    cout << "\tc1_hat: " << c1_hat << ", c2_hat: " << c2_hat << ", c3_hat: " << c3_hat << endl;
+//  }
+
+  //this needs to be time scaled based on resolve_horizon
+  double time_scaling = resolve_horizon/(time_horizon - current_time);
+  if (time_scaling > 1.0)
+  {
+    time_scaling = 1.0;
+  }
+  vector<double> w_hat;
+  w_hat.push_back(time_scaling*(weights[0] - c1));
+  w_hat.push_back(time_scaling*(weights[1] - c2));
+  w_hat.push_back(time_scaling*(weights[2] - c3));
+
+  // to still allow cases to be solved when budget gets used up due to stochastic policy
+  if (w_hat[0] <= .01)
+  {
+    w_hat[0] = .01;
+  }
+  if (w_hat[1] <= .1)
+  {
+    w_hat[1] = .1;
+  }
+  if (w_hat[2] <= .125)
+  {
+    w_hat[2] = .125;
+  }
+
   if (this->approach == LP_SOLVE)
   {
-    lp_solver.constructModel(weights);  // constraint thresholds {d1, d2, d3} packed into weights
+    lp_solver.constructModel(w_hat, state);  // constraint thresholds {d1, d2, d3} packed into weights
     if (!lp_solver.solveModel(1200))  // solver timeout (s) before restarting
     {
       return false;
@@ -189,25 +288,25 @@ bool TestExecutor::reset(double horizon, string trajectory_file, string lp_model
   }
   else if (this->approach == LP_LOAD)
   {
-    lp_solver.loadModel("var_" + lp_model + ".txt");
-    ROS_INFO("LP model loaded.");
+//    lp_solver.loadModel("var_" + lp_model + ".txt");
+//    ROS_INFO("LP model loaded.");
   }
   else if (this->approach == SMDP)
   {
-    solver.backwardsInduction();
-    ROS_INFO("Policy computed.");
+//    solver.backwardsInduction();
+//    ROS_INFO("Policy computed.");
   }
 
   if (this->approach == MCTS_CONSTRAINED)
   {
-    //time-scaling for non-full-depth searches
-    double time_scaling = search_depth_time / (time_horizon - current_time);
-    if (time_scaling > 1.0)
-    {
-      time_scaling = 1.0;
-    }
-
-    mcts_reward_solver.setConstraints({time_scaling*c1_hat, time_scaling*c2_hat, time_scaling*c3_hat});
+//    //time-scaling for non-full-depth searches
+//    double time_scaling = search_depth_time / (time_horizon - current_time);
+//    if (time_scaling > 1.0)
+//    {
+//      time_scaling = 1.0;
+//    }
+//
+//    mcts_reward_solver.setConstraints({time_scaling*c1_hat, time_scaling*c2_hat, time_scaling*c3_hat});
   }
 
   return true;
@@ -242,6 +341,15 @@ bool TestExecutor::run(double sim_step)
       robot_marker.color.g = 0.0;
       robot_marker.color.b = 1.0;
       robot_marker.color.a = 1.0;
+    }
+
+    if (lp_resolve)
+    {
+      if (!resolve())
+      {
+        ROS_INFO("Resolve failed!!!");
+        return true;
+      }
     }
 
     if (approach == SMDP)
@@ -436,12 +544,13 @@ void TestExecutor::freeLP()
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
-//  vector<double> weights{1, 300, 40};
-//  TestExecutor te(180, 2.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
-//  TestExecutor te_repeat(180, 2.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 180, "iss_trajectory.yaml");
-  vector<double> weights{0.67, -0.33, 0, 0};
-  TestExecutor te(176, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
-  TestExecutor te_repeat(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
+  vector<double> weights{1, 300, 300};
+//  TestExecutor te(176, 2.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
+  TestExecutor te(176, 2.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml", true, 170);
+  TestExecutor te_repeat(176, 2.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
+//  vector<double> weights{0.27, -0.34, -0.17, -0.22};
+//  TestExecutor te(176, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
+//  TestExecutor te_repeat(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_CONSTRAINED, SMDPFunctions::LINEARIZED_COST, {1, 75, 30}, 60, "iss_trajectory.yaml");
 //  TestExecutor te(180, 1.0, TestExecutor::MCTS_SCALARIZED, SMDPFunctions::LINEARIZED_COST,
 //      {0.25, -0.25, -0.25, -0.125}, 30, "iss_trajectory.yaml");
@@ -481,13 +590,15 @@ int main(int argc, char **argv)
 //                             176, 204, 184, 187, 162,
 //                             172, 174, 189, 165, 181};
 
-  ros::Rate loop_rate(500);
+  ros::Rate loop_rate(100000000);
   //TODO: uncomment here for single run
+  te.reset(176, "inspection_trajectory1.yaml", "resolve_testing", false);
   while (ros::ok())
   {
     ros::spinOnce();
-    //    if (te.run(0.0333333333333))
-    if (te.run(0.01))
+//    if (te.run(0.0333333333333))
+    if (te.run(0.0333333333333))
+//    if (te_repeat.run(0.01))
     {
       break;
     }

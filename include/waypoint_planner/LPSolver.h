@@ -29,6 +29,8 @@ public:
 
   void constructModel(std::vector<double> total_costs);
 
+  void constructModel(std::vector<double> total_costs, PerchState s0);
+
   void setScaling(int scaling_type);
 
   bool solveModel(double timeout);
@@ -42,6 +44,8 @@ public:
   Action getAction(PerchState s, size_t t);
 
   void reset(double horizon, std::string trajectory_file_name, std::string output_file_modifier="results");
+
+  void resolve(double horizon, double step, size_t t0);
 
 private:
   std::vector<geometry_msgs::Point> waypoints;
@@ -60,6 +64,7 @@ private:
 
   double time_horizon;
   double time_step;
+  size_t t0;
   size_t t_end;
 
   lprec *lp;
