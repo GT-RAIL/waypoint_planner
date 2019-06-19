@@ -152,6 +152,21 @@ target_link_libraries(test_executor
   yaml-cpp
 )
 
+add_executable(data_manager
+  src/DataManager.cpp
+  src/Action.cpp
+  src/Approximator.cpp
+  src/PerchState.cpp
+)
+target_link_libraries(data_manager
+  ${catkin_LIBRARIES}
+  ${TORCH_LIBRARIES}
+)
+#add_dependencies(
+#        data_manager
+#        ${PROJECT_NAME}_generate_messages_cpp
+#)
+
 #add_executable(example-app src/Approximator.cpp)
 #target_link_libraries(example-app ${TORCH_LIBRARIES} ${catkin_LIBRARIES})
 #set_property(TARGET example-app PROPERTY CXX_STANDARD 11)
