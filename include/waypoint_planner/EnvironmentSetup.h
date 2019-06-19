@@ -17,7 +17,8 @@ class EnvironmentSetup
 public:
   static void readWaypoints(std::string file_path, std::vector<geometry_msgs::Point> &waypoints);
 
-  static HumanTrajectory readHumanTrajectory(std::string file_path, bool interpolate=true, double step=0.033333);
+  static HumanTrajectory readHumanTrajectory(std::string file_path, bool interpolate=true, double step=0.033333,
+      bool randomize_trajectory=false);
 
   static visualization_msgs::Marker initializeHumanMarker();
 

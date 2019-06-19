@@ -6,6 +6,7 @@
 #include <std_msgs/Float32.h>
 #include <visualization_msgs/Marker.h>
 
+#include "waypoint_planner/Approximator.h"
 #include "waypoint_planner/LPSolver.h"
 //#include "waypoint_planner/MCTSSolver.h"
 #include "waypoint_planner/MCTSRewardSolver.h"
@@ -25,12 +26,15 @@ public:
         std::vector<double> weights, size_t search_depth, std::string trajectory_file,
         bool lp_resolve = false, double resolve_horizon = 30);
 
-    bool reset(double horizon, std::string trajectory_file, std::string lp_model="results", bool solve = true);
+    void randomizeWeights();
+
+    bool reset(double horizon, std::string trajectory_file, std::string lp_model="results", bool solve=true,
+        bool randomize_trajectory=false);
 
     // resolve LP from current time step and state
     bool resolve();
 
-    bool run(double sim_step);
+    bool run(double sim_step, std::string log_name="log.txt");
 
     void reportResults();
 

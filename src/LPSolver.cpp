@@ -71,7 +71,8 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   default_human_dims.z = 1.4;
 }
 
-void LPSolver::reset(double horizon, std::string trajectory_file_name, string output_file_modifier)
+void LPSolver::reset(double horizon, std::string trajectory_file_name, string output_file_modifier,
+    bool randomize_trajectory)
 {
   t0 = 0;
   time_horizon = horizon;
@@ -81,7 +82,7 @@ void LPSolver::reset(double horizon, std::string trajectory_file_name, string ou
 
   cout << "Setting time scale to end at time index: " << t_end << endl;
 
-  loadTrajectory(move(trajectory_file_name));
+  loadTrajectory(move(trajectory_file_name), randomize_trajectory);
 
   // initialize list of states
 
@@ -473,11 +474,16 @@ void LPSolver::costConstraint(uint8_t mode, double threshold)
 //  free(crow);
 }
 
-void LPSolver::loadTrajectory(std::string file_name)
+void LPSolver::loadTrajectory(std::string file_name, bool randomize_trajectory)
 {
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + file_name;
 
-  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
+  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path, true, 0.033333, randomize_trajectory);
+}
+
+HumanTrajectory LPSolver::getTrajectory()
+{
+  return trajectory;
 }
 
 void LPSolver::loadWaypoints(string file_name)

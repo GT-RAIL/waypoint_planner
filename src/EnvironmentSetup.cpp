@@ -21,7 +21,8 @@ void EnvironmentSetup::readWaypoints(std::string file_path, std::vector<geometry
   }
 }
 
-HumanTrajectory EnvironmentSetup::readHumanTrajectory(std::string file_path, bool interpolate, double step)
+HumanTrajectory EnvironmentSetup::readHumanTrajectory(std::string file_path, bool interpolate, double step,
+    bool randomize_trajectory)
 {
   HumanTrajectory trajectory;
   geometry_msgs::Pose pose;
@@ -42,6 +43,12 @@ HumanTrajectory EnvironmentSetup::readHumanTrajectory(std::string file_path, boo
   }
 
   trajectory.sortKeys();
+
+  if (randomize_trajectory)
+  {
+    trajectory.randomizeTrajectory();
+    trajectory.sortKeys();
+  }
 
   if (interpolate)
   {

@@ -23,7 +23,7 @@ public:
   LPSolver(double horizon, double step, std::string trajectory_file_name="iss_trajectory.yaml",
       std::string waypoint_file_name="iss_waypoints.csv");
 
-  void loadTrajectory(std::string file_name);
+  void loadTrajectory(std::string file_name, bool randomize_trajectory=false);
 
   void loadWaypoints(std::string file_name);
 
@@ -43,9 +43,12 @@ public:
 
   Action getAction(PerchState s, size_t t);
 
-  void reset(double horizon, std::string trajectory_file_name, std::string output_file_modifier="results");
+  void reset(double horizon, std::string trajectory_file_name, std::string output_file_modifier="results",
+      bool randomize_trajectory=false);
 
   void resolve(double horizon, double step, size_t t0);
+
+  HumanTrajectory getTrajectory();
 
 private:
   std::vector<geometry_msgs::Point> waypoints;

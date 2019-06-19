@@ -11,6 +11,7 @@ HumanSimulator::HumanSimulator() :
   std::cout << "Reading trajectory from " << trajectory_filename << std::endl;
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_filename;
   trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
+//  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path, true, 0.033333, true);
 
   int task_vis;
   pnh.param<int>("task", task_vis, 1);

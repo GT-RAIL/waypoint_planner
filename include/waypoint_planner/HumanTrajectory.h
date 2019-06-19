@@ -12,6 +12,8 @@ public:
 
     void addPose(double time, geometry_msgs::Pose pose);
 
+    void randomizeTrajectory(double arc_trans=0.8, double arc_rot=0.5, double key_trans=0.2, double key_rot=0.15);
+
     void interpolate(double step);
 
     void sortKeys();

@@ -3,6 +3,8 @@ project(waypoint_planner)
 
 add_compile_options(-std=c++11)
 
+#find_package(Torch REQUIRED PATHS /home/dekent/torch/libtorch)
+find_package(Torch REQUIRED PATHS /usr/local/lib/python2.7/dist-packages/torch)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -11,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   cmake_modules
   geometry_msgs
   interactive_markers
+  pcl_ros
   roscpp
   roslib
   std_msgs
@@ -19,6 +22,8 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_geometry_msgs
   visualization_msgs
 )
+
+
 
 find_library(lpsolve_LIBRARIES NAMES liblpsolve55.so lpsolve55 PATH_SUFFIXES lp_solve)
 
@@ -134,6 +139,7 @@ add_executable(test_executor
   src/MCTSRewardSolver.cpp
   src/MCTSScalarizedSolver.cpp
   src/PerchState.cpp
+  src/Approximator.cpp
 )
 add_dependencies(
   test_executor
@@ -142,8 +148,13 @@ add_dependencies(
 target_link_libraries(test_executor
   ${catkin_LIBRARIES}
   ${lpsolve_LIBRARIES}
+  ${TORCH_LIBRARIES}
   yaml-cpp
 )
+
+#add_executable(example-app src/Approximator.cpp)
+#target_link_libraries(example-app ${TORCH_LIBRARIES} ${catkin_LIBRARIES})
+#set_property(TARGET example-app PROPERTY CXX_STANDARD 11)
 
 #############
 ## Install ##
