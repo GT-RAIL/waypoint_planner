@@ -18,14 +18,17 @@ class DataManager
 public:
     DataManager();
 
-    void readFile();
+    void testReadData();
 
-    void unpackLine(std::string line);
+    void unpackLine(std::string line, Action &action, std::vector<double> &cost_constraints, PerchState &state,
+        std::vector<geometry_msgs::Pose> &trajectory);
 
 private:
   ros::NodeHandle pnh;
 
   std::string file_path;
+
+  Approximator approximator;
 };
 
 #endif  // WAYPOINT_PLANNER_HUMAN_SIMULATOR_H_

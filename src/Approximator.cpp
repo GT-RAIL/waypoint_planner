@@ -2,6 +2,8 @@
 #include <tf2/LinearMath/Matrix3x3.h>
 #include "waypoint_planner/Approximator.h"
 
+using std::cout;
+using std::endl;
 using std::fstream;
 using std::string;
 using std::vector;
@@ -55,13 +57,21 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
   tf2::Quaternion q_tf(trajectory[start_index].orientation.x, trajectory[start_index].orientation.y,
       trajectory[start_index].orientation.z, trajectory[start_index].orientation.w);
   tf2::Matrix3x3 mat_tf(q_tf);
-  double roll, pitch, yaw;
-  mat_tf.getRPY(roll, pitch, yaw);
-  int prev_rol = rotIndex(roll);
-  int prev_pit = rotIndex(pitch);
-  int prev_yaw = rotIndex(yaw);
+  double roll_prev, pitch_prev, yaw_prev;
+  mat_tf.getRPY(roll_prev, pitch_prev, yaw_prev);
+  int prev_rol = rotIndex(roll_prev + M_PI);
+  int prev_pit = rotIndex(pitch_prev + M_PI);
+  int prev_yaw = rotIndex(yaw_prev + M_PI);
 
+  if (prev_z < 0 || prev_y < 0 || prev_x < 0)
+  {
+    cout << "index out of bounds!" << endl;
+  }
   pos_image[prev_z][prev_y][prev_x] = static_cast<float>(window - start_index)/window;
+  if (prev_yaw < 0 || prev_pit < 0 || prev_rol < 0)
+  {
+    cout << "index out of bounds!" << endl;
+  }
   rot_image[prev_yaw][prev_pit][prev_rol] = static_cast<float>(window - start_index)/window;
 
   for (long i = start_index - 1; i >= 0; i --)
@@ -73,6 +83,10 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
     if (prev_x == cur_x && prev_y == cur_y && prev_z == cur_z)
     {
       // simply overwrite the value to the earlier time intensity
+      if (cur_z < 0 || cur_y < 0 || cur_x < 0)
+      {
+        cout << "index out of bounds!" << endl;
+      }
       pos_image[cur_z][cur_y][cur_x] = static_cast<float>(window - i)/window;
     }
     else
@@ -85,41 +99,58 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
         pos_image[points[j][2]][points[j][1]][points[j][0]] = (static_cast<float>(window - (i + 1))
             + static_cast<float>(j + 1)/points.size())/window;
       }
+//      if (cur_z < 0 || cur_y < 0 || cur_x < 0)
+//      {
+//        cout << "index out of bounds!" << endl;
+//      }
+//      pos_image[cur_z][cur_y][cur_x] = static_cast<float>(window - i)/window;
+
+      prev_x = cur_x;
+      prev_y = cur_y;
+      prev_z = cur_z;
     }
 
     // update rotation image with current trajectory point
-    tf2::Quaternion q_tf_cur(trajectory[start_index].orientation.x, trajectory[start_index].orientation.y,
-                         trajectory[start_index].orientation.z, trajectory[start_index].orientation.w);
+    tf2::Quaternion q_tf_cur(trajectory[i].orientation.x, trajectory[i].orientation.y,
+                         trajectory[i].orientation.z, trajectory[i].orientation.w);
     tf2::Matrix3x3 mat_tf_cur(q_tf_cur);
     double roll_cur, pitch_cur, yaw_cur;
     mat_tf_cur.getRPY(roll_cur, pitch_cur, yaw_cur);
-    int cur_rol = rotIndex(roll_cur);
-    int cur_pit = rotIndex(pitch_cur);
-    int cur_yaw = rotIndex(yaw_cur);
-//    if ((prev_rol == cur_rol && prev_pit == cur_pit && prev_yaw == cur_yaw) || fabs(cur_rol - prev_rol) > M_PI
-//        || fabs(cur_pit - prev_pit) > M_PI || fabs(cur_yaw - prev_yaw) > M_PI)
-    if (prev_rol == cur_rol && prev_pit == cur_pit && prev_yaw == cur_yaw)
+    int cur_rol = rotIndex(roll_cur + M_PI);
+    int cur_pit = rotIndex(pitch_cur + M_PI);
+    int cur_yaw = rotIndex(yaw_cur + M_PI);
+    if ((prev_rol == cur_rol && prev_pit == cur_pit && prev_yaw == cur_yaw) || fabs(roll_cur - roll_prev) > M_PI
+        || fabs(pitch_cur - pitch_prev) > M_PI || fabs(yaw_cur - yaw_prev) > M_PI)
+//    if (prev_rol == cur_rol && prev_pit == cur_pit && prev_yaw == cur_yaw)
     {
       // simply overwrite the value to the earlier time intensity
-      pos_image[cur_yaw][cur_pit][cur_rol] = static_cast<float>(window - i)/window;
+      rot_image[cur_yaw][cur_pit][cur_rol] = static_cast<float>(window - i)/window;
     }
     else
     {
+
       // interpolate between prev and cur points
       vector< vector<int> > points = interpolatePoints(prev_rol, cur_rol, prev_pit, cur_pit, prev_yaw, cur_yaw);
 
       for (size_t j = 0; j < points.size(); j ++)
       {
-        pos_image[points[j][2]][points[j][1]][points[j][0]] = (static_cast<float>(window - (i + 1))
+        rot_image[points[j][2]][points[j][1]][points[j][0]] = (static_cast<float>(window - (i + 1))
                                                                + static_cast<float>(j + 1)/points.size())/window;
       }
     }
+    prev_rol = cur_rol;
+    prev_pit = cur_pit;
+    prev_yaw = cur_yaw;
+    roll_prev = roll_cur;
+    pitch_prev = pitch_cur;
+    yaw_prev = yaw_cur;
   }
 
   ROS_INFO("Constructed position and rotation 3D trajectory image tensors.");
   ROS_INFO("Converting them to point clouds for visualization...");
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr vis_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
   vis_cloud->header.frame_id = "world";
+  int n = 0;
   for (size_t k = 0; k < pos_image.size(0); k ++)
   {
     for (size_t j = 0; j < pos_image.size(1); j ++)
@@ -128,10 +159,11 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
       {
         if (pos_image[k][j][i].item<float>() > 0)
         {
+          n ++;
           pcl::PointXYZRGB p;
-          p.x = i;
-          p.y = j;
-          p.z = k;
+          p.x = static_cast<float>(i)/IMAGE_SIZE;
+          p.y = static_cast<float>(j)/IMAGE_SIZE;
+          p.z = static_cast<float>(k)/IMAGE_SIZE;
           p.r = static_cast<uint8_t>(pos_image[k][j][i].item<float>()*255);
           p.g = static_cast<uint8_t>(pos_image[k][j][i].item<float>()*255);
           p.b = static_cast<uint8_t>(pos_image[k][j][i].item<float>()*255);
@@ -140,19 +172,20 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
         }
         else
         {
-          pcl::PointXYZRGB p;
-          p.x = i;
-          p.y = j;
-          p.z = k;
-          p.r = 127;
-          p.g = 127;
-          p.b = 127;
-          p.a = 31;
-          vis_cloud->points.push_back(p);
+//          pcl::PointXYZRGB p;
+//          p.x = static_cast<float>(i)/IMAGE_SIZE;
+//          p.y = static_cast<float>(j)/IMAGE_SIZE;
+//          p.z = static_cast<float>(k)/IMAGE_SIZE;
+//          p.r = 127;
+//          p.g = 127;
+//          p.b = 127;
+//          p.a = 31;
+//          vis_cloud->points.push_back(p);
         }
       }
     }
   }
+  std::cout << "Non-zero points: " << n << std::endl;
 
   for (size_t k = 0; k < rot_image.size(0); k ++)
   {
@@ -163,9 +196,9 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
         if (rot_image[k][j][i].item<float>() > 0)
         {
           pcl::PointXYZRGB p;
-          p.x = i + 1.2;
-          p.y = j;
-          p.z = k;
+          p.x = static_cast<float>(i)/IMAGE_SIZE + 1.2;
+          p.y = static_cast<float>(j)/IMAGE_SIZE;
+          p.z = static_cast<float>(k)/IMAGE_SIZE;
           p.r = static_cast<uint8_t>(rot_image[k][j][i].item<float>()*255);
           p.g = static_cast<uint8_t>(rot_image[k][j][i].item<float>()*255);
           p.b = static_cast<uint8_t>(rot_image[k][j][i].item<float>()*255);
@@ -174,15 +207,15 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
         }
         else
         {
-          pcl::PointXYZRGB p;
-          p.x = i + 1.2;
-          p.y = j;
-          p.z = k;
-          p.r = 127;
-          p.g = 127;
-          p.b = 127;
-          p.a = 31;
-          vis_cloud->points.push_back(p);
+//          pcl::PointXYZRGB p;
+//          p.x = static_cast<float>(i)/IMAGE_SIZE + 1.2;
+//          p.y = static_cast<float>(j)/IMAGE_SIZE;
+//          p.z = static_cast<float>(k)/IMAGE_SIZE;
+//          p.r = 127;
+//          p.g = 127;
+//          p.b = 127;
+//          p.a = 31;
+//          vis_cloud->points.push_back(p);
         }
       }
     }
@@ -208,7 +241,7 @@ int Approximator::zIndex(double z)
 
 int Approximator::rotIndex(double rot)
 {
-  return lround(rot/M_2_PI*(IMAGE_SIZE - 1));
+  return lround(rot/(2*M_PI)*(IMAGE_SIZE - 1));
 }
 
 std::vector< std::vector<int> > Approximator::interpolatePoints(int x1, int x2, int y1, int y2, int z1, int z2)

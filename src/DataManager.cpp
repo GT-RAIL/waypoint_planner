@@ -7,35 +7,38 @@ using std::string;
 using std::vector;
 
 DataManager::DataManager() :
-    pnh("~")
+    pnh("~"), approximator()
 {
   // get data file
   string data_filename;
-  pnh.param<string>("data_file", data_filename, "log_pick_place.txt");
+  pnh.param<string>("data_file", data_filename, "log_experiment.txt");
   std::cout << "Ready to read from data/" << data_filename << std::endl;
   file_path = ros::package::getPath("waypoint_planner") + "/data/" + data_filename;
 }
 
-void DataManager::readFile()
+void DataManager::testReadData()
 {
   string line;
   ifstream datafile(file_path);
   if (datafile.is_open())
   {
     getline(datafile, line);
-    unpackLine(line);
+    Action action(Action::OBSERVE);
+    vector<double> cost_constraints;
+    PerchState state;
+    vector<geometry_msgs::Pose> trajectory;
+    unpackLine(line, action, cost_constraints, state, trajectory);
     datafile.close();
+
+    approximator.createInput(cost_constraints, state, trajectory);
   }
 }
 
-void DataManager::unpackLine(string line)
+void DataManager::unpackLine(string line, Action &action, vector<double> &cost_constraints, PerchState &state,
+    vector<geometry_msgs::Pose> &trajectory)
 {
-  // log data, in the form:
-  //  action type, goal x, goal y, goal z, c1 remaining, c2 remaining, c3 remaining, current x, current y, current z,
-  //  perched, [remaining human trajectory: x, y, z, qx, qy, qz, qw, ...]
-
   // Action (label)
-  uint8_t a_id = atoi(line.substr(0, line.find(',')).c_str());
+  action.setActionType(atoi(line.substr(0, line.find(',')).c_str()));
   line = line.substr(line.find(',') + 1);
 
   geometry_msgs::Point goal;
@@ -45,11 +48,9 @@ void DataManager::unpackLine(string line)
   line = line.substr(line.find(',') + 1);
   goal.z = atof(line.substr(0, line.find(',')).c_str());
   line = line.substr(line.find(',') + 1);
-
-  Action action(a_id, goal);
+  action.setGoal(goal);
 
   // Costs
-  vector<double> cost_constraints;
   cost_constraints.push_back(atof(line.substr(0, line.find(',')).c_str()));
   line = line.substr(line.find(',') + 1);
   cost_constraints.push_back(atof(line.substr(0, line.find(',')).c_str()));
@@ -58,20 +59,16 @@ void DataManager::unpackLine(string line)
   line = line.substr(line.find(',') + 1);
 
   // Robot State
-  geometry_msgs::Point robot_pose;
-  robot_pose.x = atof(line.substr(0, line.find(',')).c_str());
+  state.waypoint.x = atof(line.substr(0, line.find(',')).c_str());
   line = line.substr(line.find(',') + 1);
-  robot_pose.y = atof(line.substr(0, line.find(',')).c_str());
+  state.waypoint.y = atof(line.substr(0, line.find(',')).c_str());
   line = line.substr(line.find(',') + 1);
-  robot_pose.z = atof(line.substr(0, line.find(',')).c_str());
-  line = line.substr(line.find(',') + 1);
-
-  bool perched = atoi(line.substr(0, line.find(',')).c_str());
+  state.waypoint.z = atof(line.substr(0, line.find(',')).c_str());
   line = line.substr(line.find(',') + 1);
 
-  PerchState state(robot_pose, perched);
+  state.perched = atoi(line.substr(0, line.find(',')).c_str());
+  line = line.substr(line.find(',') + 1);
 
-  vector<geometry_msgs::Pose> trajectory;
   while (line.find(',') != string::npos)
   {
     geometry_msgs::Pose pose;
@@ -89,14 +86,15 @@ void DataManager::unpackLine(string line)
     line = line.substr(line.find(',') + 1);
     pose.orientation.w = atof(line.substr(0, line.find(',')).c_str());
     line = line.substr(line.find(',') + 1);
+    trajectory.push_back(pose);
   }
 
   cout << "Read line:" << endl;
   cout << "\tAction: " << std::to_string(action.actionType()) << "(" << action.actionGoal().x << ", "
-      << action.actionGoal().y << ", " << action.actionGoal().z << endl;
+      << action.actionGoal().y << ", " << action.actionGoal().z << ")" << endl;
   cout << "\tCosts: " << cost_constraints[0] << ", " << cost_constraints[1] << ", " << cost_constraints[2] << endl;
   cout << "\tRobot State: " << state.perched << " - (" << state.waypoint.x << ", " << state.waypoint.y << ", "
-      << state.waypoint.z << endl;
+      << state.waypoint.z << ")" << endl;
   cout << "\tRemaining trajectory size: " << trajectory.size() << endl;
 }
 
@@ -105,7 +103,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "data_manager");
   DataManager dm;
 
-  dm.readFile();
+  dm.testReadData();
 
   return EXIT_SUCCESS;
 }
