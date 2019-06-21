@@ -156,11 +156,14 @@ add_executable(data_manager
   src/DataManager.cpp
   src/Action.cpp
   src/Approximator.cpp
+  src/EnvironmentSetup.cpp
+  src/HumanTrajectory.cpp
   src/PerchState.cpp
 )
 target_link_libraries(data_manager
   ${catkin_LIBRARIES}
   ${TORCH_LIBRARIES}
+  yaml-cpp
 )
 #add_dependencies(
 #        data_manager

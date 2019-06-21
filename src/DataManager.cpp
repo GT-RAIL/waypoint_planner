@@ -5,15 +5,24 @@ using std::endl;
 using std::ifstream;
 using std::string;
 using std::vector;
+using namespace torch;
 
 DataManager::DataManager() :
     pnh("~"), approximator()
 {
   // get data file
-  string data_filename;
-  pnh.param<string>("data_file", data_filename, "log_experiment.txt");
-  std::cout << "Ready to read from data/" << data_filename << std::endl;
-  file_path = ros::package::getPath("waypoint_planner") + "/data/" + data_filename;
+  string waypoint_filename;
+  pnh.param<string>("data_file", data_filename, "log_experiment");
+  pnh.param<string>("waypoint_file", waypoint_filename, "iss_waypoints.csv");
+  pnh.param<bool>("classifier_mode", classifier_mode, true);
+  std::cout << "Ready to read from data/" << data_filename << ".csv" << std::endl;
+  file_path = ros::package::getPath("waypoint_planner") + "/data/" + data_filename + ".csv";
+
+  // set up waypoints for label generation
+  if (classifier_mode)
+  {
+    approximator.readWaypoints(ros::package::getPath("waypoint_planner") + "/config/" + waypoint_filename);
+  }
 }
 
 void DataManager::testReadData()
@@ -22,6 +31,7 @@ void DataManager::testReadData()
   ifstream datafile(file_path);
   if (datafile.is_open())
   {
+    int i = 0;  // TODO: loop through all csv entries
     getline(datafile, line);
     Action action(Action::OBSERVE);
     vector<double> cost_constraints;
@@ -30,7 +40,51 @@ void DataManager::testReadData()
     unpackLine(line, action, cost_constraints, state, trajectory);
     datafile.close();
 
-    approximator.createInput(cost_constraints, state, trajectory);
+    Tensor pos_image = torch::zeros(IntArrayRef{static_cast<long>(Approximator::IMAGE_SIZE),
+                                                static_cast<long>(Approximator::IMAGE_SIZE),
+                                                static_cast<long>(Approximator::IMAGE_SIZE)});
+    Tensor rot_image = torch::zeros(IntArrayRef{static_cast<long>(Approximator::IMAGE_SIZE),
+                                                 static_cast<long>(Approximator::IMAGE_SIZE),
+                                                 static_cast<long>(Approximator::IMAGE_SIZE)});
+    approximator.createInput(cost_constraints, state, trajectory, pos_image, rot_image);
+
+    Tensor state_data = torch::zeros(IntArrayRef{7});
+    state_data[0] = static_cast<float>(cost_constraints[0]);
+    state_data[1] = static_cast<float>(cost_constraints[1]);
+    state_data[2] = static_cast<float>(cost_constraints[2]);
+    state_data[3] = state.waypoint.x;
+    state_data[4] = state.waypoint.y;
+    state_data[5] = state.waypoint.z;
+    state_data[6] = static_cast<float>(state.perched);
+
+    string output_csv_path =  ros::package::getPath("waypoint_planner") + "/data/samples.csv";
+    string output_tensor_name = data_filename + "-" + std::to_string(i);
+    string pos_image_file = ros::package::getPath("waypoint_planner") + "/data/trajectories" + output_tensor_name
+        + "-pos.pt";
+    string rot_image_file = ros::package::getPath("waypoint_planner") + "/data/trajectories" + output_tensor_name
+        + "-rot.pt";
+    string state_data_file = ros::package::getPath("waypoint_planner") + "/data/trajectories" + output_tensor_name
+                             + "-data.pt";
+
+    // write to processed csv file
+    std::ofstream sample_file;
+    sample_file.open(output_csv_path, std::ios::out | std::ios::app);
+    if (classifier_mode)
+    {
+      sample_file << std::to_string(approximator.actionToLabel(action)) << ",";
+    }
+    else
+    {
+      sample_file << std::to_string(action.actionType()) << "," << action.actionGoal().x << ","
+        << action.actionGoal().y << "," << action.actionGoal().z << ",";
+    }
+    sample_file << output_tensor_name << endl;
+    sample_file.close();
+
+    // output tensor data for pos and rot images
+    save(pos_image, pos_image_file);
+    save(rot_image, rot_image_file);
+    save(state_data, state_data_file);
   }
 }
 
@@ -97,6 +151,7 @@ void DataManager::unpackLine(string line, Action &action, vector<double> &cost_c
       << state.waypoint.z << ")" << endl;
   cout << "\tRemaining trajectory size: " << trajectory.size() << endl;
 }
+
 
 int main(int argc, char **argv)
 {

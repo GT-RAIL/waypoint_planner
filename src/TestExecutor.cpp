@@ -818,7 +818,7 @@ int main(int argc, char **argv)
   ros::Time start_time = ros::Time::now();
   for (size_t trials = 0; trials < 16; trials ++)
   {
-    ROS_INFO("Start of trial %d", trials);
+    ROS_INFO("Start of trial %lu", trials);
     results_r.resize(results_r.size() + trajectory_files.size());
     results_c1.resize(results_c1.size() + trajectory_files.size());
     results_c2.resize(results_c2.size() + trajectory_files.size());

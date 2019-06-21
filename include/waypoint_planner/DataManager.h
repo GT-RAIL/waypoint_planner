@@ -27,6 +27,8 @@ private:
   ros::NodeHandle pnh;
 
   std::string file_path;
+  std::string data_filename;
+  bool classifier_mode;
 
   Approximator approximator;
 };
