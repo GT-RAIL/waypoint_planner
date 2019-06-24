@@ -4,18 +4,21 @@ using std::pair;
 using std::string;
 using std::vector;
 
-SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode)
+SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string waypoint_file_name, vector<double> weights)
 {
   this->mode = mode;
+  linearization_weights = weights;
   time_horizon = horizon;
   time_step = step;
 
+  loadWaypoints(waypoint_file_name);
+
   // default weights
-  if (this->mode == SMDPFunctions::LINEARIZED_COST)
+  if (linearization_weights.size() == 0 && this->mode == SMDPFunctions::LINEARIZED_COST)
   {
-    for (size_t i = 0; i < 3; i ++)
+    for (size_t i = 0; i < 4; i ++)
     {
-      linearization_weights.push_back(0.333333);
+      linearization_weights.push_back(0.25);
     }
   }
 
@@ -24,6 +27,7 @@ SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode)
   default_human_dims.z = 1.4;
 }
 
+// Deprecated with new trajectory sampling API (trajectories should be passed in instead)
 SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string trajectory_file_name,
     string waypoint_file_name, vector<double> weights)
 {
@@ -55,11 +59,18 @@ void SMDPSolver::reset(double horizon, string trajectory_file_name)
   loadTrajectory(trajectory_file_name);
 }
 
+void SMDPSolver::setTrajectory(std::vector<HumanTrajectory> trajectories)
+{
+  this->trajectories = trajectories;
+}
+
+// Deprecated with new trajectory sampling API (trajectories should be passed in instead)
 void SMDPSolver::loadTrajectory(std::string file_name)
 {
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + file_name;
 
-  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
+  trajectories.resize(1);
+  trajectories[0] = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
 }
 
 void SMDPSolver::loadWaypoints(string file_name)
@@ -94,18 +105,33 @@ void SMDPSolver::backwardsInduction()
   {
     if (mode == SMDPFunctions::REWARD)
     {
-      utility_map[i][t_end] = RewardsAndCosts::reward_recognition(trajectory.getPose(t_end * time_step),
-                                                                  default_human_dims, perch_states[i].waypoint);
+      double u_end = 0;
+      for (size_t j = 0; j < trajectories.size(); j ++)
+      {
+        u_end += RewardsAndCosts::reward_recognition(trajectories[j].getPose(t_end * time_step), default_human_dims,
+            perch_states[i].waypoint);
+      }
+      utility_map[i][t_end] = u_end/trajectories.size();
     }
     else if (mode == SMDPFunctions::COLLISION)
     {
-      utility_map[i][t_end] = RewardsAndCosts::cost_collision(trajectory.getPose(t_end * time_step),
-                                                                  default_human_dims, perch_states[i].waypoint);
+      double u_end = 0;
+      for (size_t j = 0; j < trajectories.size(); j ++)
+      {
+        u_end += RewardsAndCosts::cost_collision(trajectories[j].getPose(t_end * time_step), default_human_dims,
+            perch_states[i].waypoint);
+      }
+      utility_map[i][t_end] = u_end/trajectories.size();
     }
     else if (mode == SMDPFunctions::INTRUSION)
     {
-      utility_map[i][t_end] = RewardsAndCosts::cost_intrusion(trajectory.getPose(t_end * time_step),
-          perch_states[i].waypoint, perch_states[i].perched);
+      double u_end = 0;
+      for (size_t j = 0; j < trajectories.size(); j ++)
+      {
+        u_end += RewardsAndCosts::cost_intrusion(trajectories[j].getPose(t_end * time_step), perch_states[i].waypoint,
+            perch_states[i].perched);
+      }
+      utility_map[i][t_end] = u_end/trajectories.size();
     }
     else if (mode == SMDPFunctions::POWER)
     {
@@ -113,11 +139,16 @@ void SMDPSolver::backwardsInduction()
     }
     else
     {
-      // note: we set perched to true and action to observe because at the final time step, we take no action and
-      // therefore the power consumption cost should be zero
-      utility_map[i][t_end] = SMDPFunctions::linearizedCost(trajectory.getPose(t_end * time_step), default_human_dims,
-                                                            perch_states[i].waypoint, true, Action(Action::OBSERVE),
-                                                            linearization_weights);
+      double u_end = 0;
+      for (size_t j = 0; j < trajectories.size(); j ++)
+      {
+        // note: we set perched to true and action to observe because at the final time step, we take no action and
+        // therefore the power consumption cost should be zero
+        u_end += SMDPFunctions::linearizedCost(trajectories[j].getPose(t_end * time_step), default_human_dims,
+                                               perch_states[i].waypoint, true, Action(Action::OBSERVE),
+                                               linearization_weights);
+      }
+      utility_map[i][t_end] = u_end/trajectories.size();
     }
   }
 
@@ -126,27 +157,35 @@ void SMDPSolver::backwardsInduction()
   {
     for (size_t i = 0; i < perch_states.size(); i ++)
     {
-      State s(perch_states[i].waypoint, perch_states[i].perched, trajectory.getPose(t * time_step));  // TODO: extend this over multiple trajectories, store an arbitrary state as s
+      vector<State> states;
+      for (size_t j = 0; j < trajectories.size(); j ++)
+      {
+        State s_temp(perch_states[i].waypoint, perch_states[i].perched, trajectories[j].getPose(t * time_step));
+        states.push_back(s_temp);
+      }
+//      // arbitrary state that's only used for non-human-pose calculations
+//      State s(perch_states[i].waypoint, perch_states[i].perched, trajectories[0].getPose(t * time_step));
 
       Action best_a(Action::OBSERVE);
       double best_u = std::numeric_limits<double>::lowest();
       for (Action a : actions)
       {
-        if (!SMDPFunctions::isValidAction(PerchState(s.robotPose(), s.isPerched()), a))
+        if (!SMDPFunctions::isValidAction(perch_states[i], a))
         {
           continue;
         }
 
-        double u = SMDPFunctions::reward(s, a, mode, linearization_weights);  // TODO: pass in the set of states rather than the state
+        // utility calculated over set of states from all trajectories
+        double u = SMDPFunctions::reward(states, a, mode, linearization_weights);
         vector<PerchState> s_primes;
         vector<double> transition_probabilities;
-        SMDPFunctions::transitionModel(PerchState(s.robotPose(), s.isPerched()), a, s_primes, transition_probabilities);
+        SMDPFunctions::transitionModel(perch_states[i], a, s_primes, transition_probabilities);
         for (size_t j = 0; j < s_primes.size(); j ++)
         {
           double u2 = 0;
           vector<double> dts;
           vector<double> dt_probabilities;
-          a.duration(s.robotPose(), s_primes[j].waypoint, dts, dt_probabilities);
+          a.duration(perch_states[i].waypoint, s_primes[j].waypoint, dts, dt_probabilities);
           size_t new_state_index = perchStateToIndex(s_primes[j]);
           for (size_t k = 0; k < dts.size(); k ++)
           {

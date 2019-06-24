@@ -14,11 +14,14 @@
 class SMDPSolver
 {
 public:
-  SMDPSolver(double horizon, double step, uint8_t mode);
+  SMDPSolver(double horizon, double step, uint8_t mode, std::string waypoint_file_name, std::vector<double> weights={});
 
-  SMDPSolver(double horizon, double step, uint8_t mode, std::string trajectory_file_name, std::string waypoint_file_name, std::vector<double> weights = {});
+  SMDPSolver(double horizon, double step, uint8_t mode, std::string trajectory_file_name,
+      std::string waypoint_file_name, std::vector<double> weights = {});
 
   void loadTrajectory(std::string file_name);
+
+  void setTrajectory(std::vector<HumanTrajectory> trajectories);
 
   void loadWaypoints(std::string file_name);
 
@@ -38,7 +41,7 @@ private:
   std::vector<PerchState> perch_states;
   std::vector<Action> actions;
 
-  HumanTrajectory trajectory;
+  std::vector<HumanTrajectory> trajectories;
 
   double time_horizon;
   double time_step;
