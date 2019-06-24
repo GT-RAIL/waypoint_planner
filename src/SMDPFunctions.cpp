@@ -96,6 +96,17 @@ double SMDPFunctions::reward(State s, Action a, uint8_t mode, vector<double> wei
   return r;
 }
 
+double SMDPFunctions::reward(vector<State> states, Action a, uint8_t mode, vector<double> weights)
+{
+  double r = 0;
+  for (auto s : states)
+  {
+    r += SMDPFunctions::reward(s, a, mode, weights);
+  }
+
+  return r/states.size();
+}
+
 void SMDPFunctions::transitionModel(PerchState s, Action a, vector<PerchState> &s_primes, vector<double> &probabilities)
 {
   PerchState s_prime;

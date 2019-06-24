@@ -1,32 +1,38 @@
 #include "waypoint_planner/HumanSimulator.h"
 
 using std::string;
+using std::vector;
 
 HumanSimulator::HumanSimulator() :
     pnh("~")
 {
   // read in waypoints
   string trajectory_filename;
-  pnh.param<string>("trajectory_file", trajectory_filename, "pick_place_trajectory.yaml");
-  std::cout << "Reading trajectory from " << trajectory_filename << std::endl;
+  int num_samples;
+  pnh.param<string>("trajectory_file", trajectory_filename, "inspection_times.yaml");
+  pnh.param<int>("num_samples", num_samples, 1);
+  std::cout << "Creating trajectories from " << trajectory_filename << std::endl;
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_filename;
-  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
-//  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path, true, 0.033333, true);
+  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_samples);
 
-  int task_vis;
-  pnh.param<int>("task", task_vis, 1);
+//  int task_vis;
+//  pnh.param<int>("task", task_vis, 1);
 
   // setup time, human marker, and publisher
   pnh.param<double>("speed_factor", speed_factor, 1.0);
   time = 0;
-  human_marker = EnvironmentSetup::initializeHumanMarker();
-  addHumanMarker("human", 0.4, 0.8, 1.0, false);
+  for (size_t i = 0; i < trajectories.size(); i ++)
+  {
+    human_marker = EnvironmentSetup::initializeHumanMarker();
+    addHumanMarker("human-" + std::to_string(i), 0.4, 0.8, 1.0, false);
+  }
+
   human_marker_publisher = pnh.advertise<visualization_msgs::Marker>("human_marker", 1, this);
   human_markers_publisher = pnh.advertise<visualization_msgs::MarkerArray>("human_markers", 1, this);
   task_markers_publisher = pnh.advertise<visualization_msgs::MarkerArray>("task_markers", 1, this);
   time_update_subscriber = pnh.subscribe<std_msgs::Float32>("time_update", 0, &HumanSimulator::timeUpdateCallback, this);
 
-  createTaskMarkers(task_vis);
+//  createTaskMarkers(task_vis);
 }
 
 void HumanSimulator::addHumanMarker(string frame, double r, double g, double b, bool task_image)
@@ -175,24 +181,24 @@ void HumanSimulator::createTaskMarkers(int task)
   {
     task_tf1.header.frame_id = "world";
     task_tf1.child_frame_id = "task_1";
-    task_tf1.transform.translation.x = trajectory.getPose(25).position.x;
-    task_tf1.transform.translation.y = trajectory.getPose(25).position.y;
-    task_tf1.transform.translation.z = trajectory.getPose(25).position.z;
-    task_tf1.transform.rotation = trajectory.getPose(15).orientation;
+    task_tf1.transform.translation.x = trajectories[0].getPose(25).position.x;
+    task_tf1.transform.translation.y = trajectories[0].getPose(25).position.y;
+    task_tf1.transform.translation.z = trajectories[0].getPose(25).position.z;
+    task_tf1.transform.rotation = trajectories[0].getPose(15).orientation;
 
     task_tf2.header.frame_id = "world";
     task_tf2.child_frame_id = "task_2";
-    task_tf2.transform.translation.x = trajectory.getPose(0).position.x;
-    task_tf2.transform.translation.y = trajectory.getPose(0).position.y;
-    task_tf2.transform.translation.z = trajectory.getPose(0).position.z;
-    task_tf2.transform.rotation = trajectory.getPose(0).orientation;
+    task_tf2.transform.translation.x = trajectories[0].getPose(0).position.x;
+    task_tf2.transform.translation.y = trajectories[0].getPose(0).position.y;
+    task_tf2.transform.translation.z = trajectories[0].getPose(0).position.z;
+    task_tf2.transform.rotation = trajectories[0].getPose(0).orientation;
 
     task_tf3.header.frame_id = "world";
     task_tf3.child_frame_id = "task_3";
-    task_tf3.transform.translation.x = trajectory.getPose(0).position.x;
-    task_tf3.transform.translation.y = trajectory.getPose(0).position.y;
-    task_tf3.transform.translation.z = trajectory.getPose(0).position.z;
-    task_tf3.transform.rotation = trajectory.getPose(0).orientation;
+    task_tf3.transform.translation.x = trajectories[0].getPose(0).position.x;
+    task_tf3.transform.translation.y = trajectories[0].getPose(0).position.y;
+    task_tf3.transform.translation.z = trajectories[0].getPose(0).position.z;
+    task_tf3.transform.rotation = trajectories[0].getPose(0).orientation;
 
     addHumanMarker("task_1", 0.4, 0.8, 1.0);
 
@@ -228,10 +234,10 @@ void HumanSimulator::createTaskMarkers(int task)
 
   task_tf1.header.frame_id = "world";
   task_tf1.child_frame_id = "task_1";
-  task_tf1.transform.translation.x = trajectory.getPose(0).position.x;
-  task_tf1.transform.translation.y = trajectory.getPose(0).position.y;
-  task_tf1.transform.translation.z = trajectory.getPose(0).position.z;
-  task_tf1.transform.rotation = trajectory.getPose(0).orientation;
+  task_tf1.transform.translation.x = trajectories[0].getPose(0).position.x;
+  task_tf1.transform.translation.y = trajectories[0].getPose(0).position.y;
+  task_tf1.transform.translation.z = trajectories[0].getPose(0).position.z;
+  task_tf1.transform.rotation = trajectories[0].getPose(0).orientation;
 
   addHumanMarker("task_1", 0.4, 0.8, 1.0);
 
@@ -244,17 +250,17 @@ void HumanSimulator::createTaskMarkers(int task)
 
       task_tf2.header.frame_id = "world";
       task_tf2.child_frame_id = "task_2";
-      task_tf2.transform.translation.x = trajectory.getPose(t2).position.x;
-      task_tf2.transform.translation.y = trajectory.getPose(t2).position.y;
-      task_tf2.transform.translation.z = trajectory.getPose(t2).position.z;
-      task_tf2.transform.rotation = trajectory.getPose(t2).orientation;
+      task_tf2.transform.translation.x = trajectories[0].getPose(t2).position.x;
+      task_tf2.transform.translation.y = trajectories[0].getPose(t2).position.y;
+      task_tf2.transform.translation.z = trajectories[0].getPose(t2).position.z;
+      task_tf2.transform.rotation = trajectories[0].getPose(t2).orientation;
 
       task_tf3.header.frame_id = "world";
       task_tf3.child_frame_id = "task_3";
-      task_tf3.transform.translation.x = trajectory.getPose(t3).position.x;
-      task_tf3.transform.translation.y = trajectory.getPose(t3).position.y;
-      task_tf3.transform.translation.z = trajectory.getPose(t3).position.z;
-      task_tf3.transform.rotation = trajectory.getPose(t3).orientation;
+      task_tf3.transform.translation.x = trajectories[0].getPose(t3).position.x;
+      task_tf3.transform.translation.y = trajectories[0].getPose(t3).position.y;
+      task_tf3.transform.translation.z = trajectories[0].getPose(t3).position.z;
+      task_tf3.transform.rotation = trajectories[0].getPose(t3).orientation;
 
       addHumanMarker("task_2", 1.0, 1.0, 0.5);
       addHumanMarker("task_3", 1.0, 0.4, 0.4);
@@ -267,17 +273,17 @@ void HumanSimulator::createTaskMarkers(int task)
 
       task_tf2.header.frame_id = "world";
       task_tf2.child_frame_id = "task_2";
-      task_tf2.transform.translation.x = trajectory.getPose(t2).position.x;
-      task_tf2.transform.translation.y = trajectory.getPose(t2).position.y;
-      task_tf2.transform.translation.z = trajectory.getPose(t2).position.z;
-      task_tf2.transform.rotation = trajectory.getPose(t2).orientation;
+      task_tf2.transform.translation.x = trajectories[0].getPose(t2).position.x;
+      task_tf2.transform.translation.y = trajectories[0].getPose(t2).position.y;
+      task_tf2.transform.translation.z = trajectories[0].getPose(t2).position.z;
+      task_tf2.transform.rotation = trajectories[0].getPose(t2).orientation;
 
       task_tf3.header.frame_id = "world";
       task_tf3.child_frame_id = "task_3";
-      task_tf3.transform.translation.x = trajectory.getPose(t3).position.x;
-      task_tf3.transform.translation.y = trajectory.getPose(t3).position.y;
-      task_tf3.transform.translation.z = trajectory.getPose(t3).position.z;
-      task_tf3.transform.rotation = trajectory.getPose(t3).orientation;
+      task_tf3.transform.translation.x = trajectories[0].getPose(t3).position.x;
+      task_tf3.transform.translation.y = trajectories[0].getPose(t3).position.y;
+      task_tf3.transform.translation.z = trajectories[0].getPose(t3).position.z;
+      task_tf3.transform.rotation = trajectories[0].getPose(t3).orientation;
 
       addHumanMarker("task_2", 1.0, 1.0, 0.5);
       addHumanMarker("task_3", 1.0, 0.4, 0.4);
@@ -290,17 +296,17 @@ void HumanSimulator::createTaskMarkers(int task)
 
       task_tf2.header.frame_id = "world";
       task_tf2.child_frame_id = "task_2";
-      task_tf2.transform.translation.x = trajectory.getPose(t2).position.x;
-      task_tf2.transform.translation.y = trajectory.getPose(t2).position.y;
-      task_tf2.transform.translation.z = trajectory.getPose(t2).position.z;
-      task_tf2.transform.rotation = trajectory.getPose(t2).orientation;
+      task_tf2.transform.translation.x = trajectories[0].getPose(t2).position.x;
+      task_tf2.transform.translation.y = trajectories[0].getPose(t2).position.y;
+      task_tf2.transform.translation.z = trajectories[0].getPose(t2).position.z;
+      task_tf2.transform.rotation = trajectories[0].getPose(t2).orientation;
 
       task_tf3.header.frame_id = "world";
       task_tf3.child_frame_id = "task_3";
-      task_tf3.transform.translation.x = trajectory.getPose(t3).position.x;
-      task_tf3.transform.translation.y = trajectory.getPose(t3).position.y;
-      task_tf3.transform.translation.z = trajectory.getPose(t3).position.z;
-      task_tf3.transform.rotation = trajectory.getPose(t3).orientation;
+      task_tf3.transform.translation.x = trajectories[0].getPose(t3).position.x;
+      task_tf3.transform.translation.y = trajectories[0].getPose(t3).position.y;
+      task_tf3.transform.translation.z = trajectories[0].getPose(t3).position.z;
+      task_tf3.transform.rotation = trajectories[0].getPose(t3).orientation;
 
       addHumanMarker("task_2", 1.0, 1.0, 0.5);
       addHumanMarker("task_3", 1.0, 0.3, 0.3);
@@ -311,23 +317,31 @@ void HumanSimulator::createTaskMarkers(int task)
 
 void HumanSimulator::publishTFs()
 {
-  geometry_msgs::Pose human_pose = trajectory.getPose(time);
+  vector<geometry_msgs::Pose> human_poses;
+  human_poses.resize(trajectories.size());
+  for (size_t i = 0; i < trajectories.size(); i ++)
+  {
+    human_poses[i] = trajectories[i].getPose(time);
+  }
 
-  geometry_msgs::TransformStamped human_tf;
-  human_tf.header.frame_id = "world";
-  human_tf.child_frame_id = "human";
-  human_tf.transform.translation.x = human_pose.position.x;
-  human_tf.transform.translation.y = human_pose.position.y;
-  human_tf.transform.translation.z = human_pose.position.z;
-  human_tf.transform.rotation = human_pose.orientation;
+  for (size_t i = 0; i < human_poses.size(); i ++)
+  {
+    geometry_msgs::TransformStamped human_tf;
+    human_tf.header.frame_id = "world";
+    human_tf.child_frame_id = "human-" + std::to_string(i);
+    human_tf.transform.translation.x = human_poses[i].position.x;
+    human_tf.transform.translation.y = human_poses[i].position.y;
+    human_tf.transform.translation.z = human_poses[i].position.z;
+    human_tf.transform.rotation = human_poses[i].orientation;
+    tf_broadcaster.sendTransform(human_tf);
+  }
 
-  tf_broadcaster.sendTransform(human_tf);
-  tf_broadcaster.sendTransform(task_tf1);
-  tf_broadcaster.sendTransform(task_tf2);
-  tf_broadcaster.sendTransform(task_tf3);
+//  tf_broadcaster.sendTransform(task_tf1);
+//  tf_broadcaster.sendTransform(task_tf2);
+//  tf_broadcaster.sendTransform(task_tf3);
   human_marker_publisher.publish(human_marker);
   human_markers_publisher.publish(human_markers);
-  task_markers_publisher.publish(task_markers);
+//  task_markers_publisher.publish(task_markers);
 }
 
 void HumanSimulator::advanceTime(double timestep)
@@ -350,7 +364,7 @@ int main(int argc, char **argv)
   {
     ros::spinOnce();
     hs.publishTFs();
-//    hs.advanceTime(0.0333333333333);
+    hs.advanceTime(0.333333333333);
     loop_rate.sleep();
   }
 

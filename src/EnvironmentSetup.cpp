@@ -1,7 +1,9 @@
 #include "waypoint_planner/EnvironmentSetup.h"
 
 using std::fstream;
+using std::normal_distribution;
 using std::string;
+using std::uniform_real_distribution;
 using std::vector;
 
 void EnvironmentSetup::readWaypoints(std::string file_path, std::vector<geometry_msgs::Point> &waypoints)
@@ -56,6 +58,97 @@ HumanTrajectory EnvironmentSetup::readHumanTrajectory(std::string file_path, boo
   }
 
   return trajectory;
+}
+
+void EnvironmentSetup::sampleHumanTrajectories(const string &file_path, vector<HumanTrajectory> &sampled_trajectories,
+    int num_samples, long seed, bool interpolate, double step)
+{
+  if (seed == 0)
+  {
+    seed = std::chrono::system_clock::now().time_since_epoch().count();
+  }
+  std::mt19937 gen(seed);  // random seed
+
+  sampled_trajectories.resize(num_samples);
+  vector<geometry_msgs::Pose> poses;
+  vector<double> times;
+  poses.resize(num_samples);
+  times.resize(num_samples);
+  for (size_t i = 0; i < times.size(); i ++)
+  {
+    times[i] = 0.0;
+  }
+  YAML::Node trajectoryNode = YAML::LoadFile(file_path);
+  for (size_t i = 0; i < trajectoryNode.size(); i ++)
+  {
+    YAML::Node entry = trajectoryNode[i];
+
+    // sample times from normal distributions
+    auto t_mean = entry["mean_time"].as<double>();
+    auto t_stdev = entry["stdev_time"].as<double>();
+    normal_distribution<double> time_dist(t_mean, t_stdev);
+    for (size_t j = 0; j < num_samples; j ++)
+    {
+      times[j] += time_dist(gen);
+    }
+
+    // update new poses if one is specified, otherwise use previous poses
+    if (entry["pose"])
+    {
+      double pos_stdev = 0;
+      if (entry["pos_var"])
+      {
+        pos_stdev = entry["pos_var"].as<double>() / sqrt(2.0);
+      }
+      normal_distribution<double> pos_r_dist(0, pos_stdev);
+      uniform_real_distribution<double> pos_theta_dist(0, M_PI);
+      uniform_real_distribution<double> pos_phi_dist(0, 2 * M_PI);
+
+      double rot_stdev;
+      if (entry["rot_var"])
+      {
+        rot_stdev = entry["rot_var"].as<double>();
+      }
+      normal_distribution<double> rot_dist(0, rot_stdev);
+
+      for (size_t j = 0; j < num_samples; j ++)
+      {
+        // add position noise using spherical coordinates
+        double r = fabs(pos_r_dist(gen));
+        double theta = pos_theta_dist(gen);
+        double phi = pos_phi_dist(gen);
+        poses[j].position.x = entry["pose"]["position"]["x"].as<double>() + r*sin(theta)*cos(phi);
+        poses[j].position.y = entry["pose"]["position"]["y"].as<double>() + r*sin(theta)*sin(phi);
+        poses[j].position.z = entry["pose"]["position"]["z"].as<double>() + r*cos(theta);
+
+        // add orientation noise to each of roll, pitch, and yaw
+        btQuaternion q_key(entry["pose"]["orientation"]["x"].as<double>(),
+            entry["pose"]["orientation"]["y"].as<double>(), entry["pose"]["orientation"]["z"].as<double>(),
+            entry["pose"]["orientation"]["w"].as<double>());
+        btQuaternion q_rand;
+        q_rand.setEuler(rot_dist(gen), rot_dist(gen), rot_dist(gen));
+        q_key = q_key*q_rand;
+        poses[j].orientation.w = q_key.w();
+        poses[j].orientation.x = q_key.x();
+        poses[j].orientation.y = q_key.y();
+        poses[j].orientation.z = q_key.z();
+      }
+    }
+
+    for (size_t j = 0; j < num_samples; j ++)
+    {
+      sampled_trajectories[j].addPose(times[j], poses[j]);
+    }
+  }
+
+  if (interpolate)
+  {
+    for (size_t i = 0; i < num_samples; i ++)
+    {
+      sampled_trajectories[i].sortKeys();
+      sampled_trajectories[i].interpolate(step);
+    }
+  }
 }
 
 visualization_msgs::Marker EnvironmentSetup::initializeHumanMarker()

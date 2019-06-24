@@ -126,7 +126,7 @@ void SMDPSolver::backwardsInduction()
   {
     for (size_t i = 0; i < perch_states.size(); i ++)
     {
-      State s(perch_states[i].waypoint, perch_states[i].perched, trajectory.getPose(t * time_step));
+      State s(perch_states[i].waypoint, perch_states[i].perched, trajectory.getPose(t * time_step));  // TODO: extend this over multiple trajectories, store an arbitrary state as s
 
       Action best_a(Action::OBSERVE);
       double best_u = std::numeric_limits<double>::lowest();
@@ -137,7 +137,7 @@ void SMDPSolver::backwardsInduction()
           continue;
         }
 
-        double u = SMDPFunctions::reward(s, a, mode, linearization_weights);
+        double u = SMDPFunctions::reward(s, a, mode, linearization_weights);  // TODO: pass in the set of states rather than the state
         vector<PerchState> s_primes;
         vector<double> transition_probabilities;
         SMDPFunctions::transitionModel(PerchState(s.robotPose(), s.isPerched()), a, s_primes, transition_probabilities);

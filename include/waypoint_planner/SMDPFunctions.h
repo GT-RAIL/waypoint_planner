@@ -21,6 +21,8 @@ public:
 
   static double reward(State s, Action a, uint8_t mode=REWARD, std::vector<double> weights={});
 
+  static double reward(std::vector<State> states, Action a, uint8_t mode=REWARD, std::vector<double> weights={});
+
   static void transitionModel(PerchState s, Action a, std::vector<PerchState> &s_primes,
       std::vector<double> &probabilities);
 

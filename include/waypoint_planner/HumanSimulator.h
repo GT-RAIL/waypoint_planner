@@ -42,7 +42,7 @@ private:
 
   tf2_ros::TransformBroadcaster tf_broadcaster;
 
-  HumanTrajectory trajectory;
+  std::vector<HumanTrajectory> trajectories;
   double time;
   double speed_factor;
 
