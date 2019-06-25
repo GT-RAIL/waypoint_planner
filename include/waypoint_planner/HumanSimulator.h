@@ -13,6 +13,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <std_msgs/Float32.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <waypoint_planner/HumanTrajectoryMsg.h>
 
 #include "waypoint_planner/EnvironmentSetup.h"
 
@@ -29,6 +30,8 @@ private:
 
   void timeUpdateCallback(const std_msgs::Float32::ConstPtr& msg);
 
+  void trajectoryUpdateCallback(const waypoint_planner::HumanTrajectoryMsg::ConstPtr& msg);
+
   void createTaskMarkers(int task);
 
   void addHumanMarker(std::string frame, double r, double g, double b, bool task_image=true);
@@ -39,6 +42,7 @@ private:
   ros::Publisher human_markers_publisher;
   ros::Publisher task_markers_publisher;
   ros::Subscriber time_update_subscriber;
+  ros::Subscriber trajectory_update_subscriber;
 
   tf2_ros::TransformBroadcaster tf_broadcaster;
 

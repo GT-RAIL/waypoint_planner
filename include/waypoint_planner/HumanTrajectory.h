@@ -4,6 +4,7 @@
 // ROS
 #include <geometry_msgs/Pose.h>
 #include <tf2_bullet/tf2_bullet.h>
+#include <waypoint_planner/HumanTrajectoryMsg.h>
 
 class HumanTrajectory
 {
@@ -19,6 +20,10 @@ public:
     void sortKeys();
 
     geometry_msgs::Pose getPose(double t);
+
+    void fromMsg(const waypoint_planner::HumanTrajectoryMsg &msg);
+
+    waypoint_planner::HumanTrajectoryMsg toMsg();
 
 private:
   std::map<double, geometry_msgs::Pose> trajectory;

@@ -22,25 +22,22 @@ public:
     static const uint8_t MCTS_CONSTRAINED;
     static const uint8_t MCTS_SCALARIZED;
 
-    TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode,
-        std::vector<double> weights, size_t search_depth, std::string trajectory_file,
-        size_t trajectory_samples = 100, bool lp_resolve = false, double resolve_horizon = 30);
+    TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, std::vector<double> weights,
+        bool optimal = false);
 
     void randomizeWeights();
 
-    bool reset(double horizon, std::string trajectory_file, std::string lp_model="results", bool solve=true,
-        bool randomize_trajectory=false);
+    void reset(double horizon);
 
-    // resolve LP from current time step and state
-    bool resolve();
+    void setTrajectories(std::vector<HumanTrajectory> trajectories);
 
-    bool run(double sim_step, std::string log_name="log.txt");
+    void setEvalTrajectory(HumanTrajectory eval_trajectory);
+
+    bool solve();
+
+    bool run(double sim_step, bool vis=true);
 
     void reportResults();
-
-    bool retryLP(int scaling_type);
-
-    void freeLP();
 
     // execution metrics
     double r;
@@ -52,15 +49,13 @@ private:
   ros::NodeHandle n, pnh;
 
   ros::Publisher robot_vis_publisher;
+  ros::Publisher optimal_robot_vis_publisher;
   ros::Publisher human_sim_time_publisher;
+  ros::Publisher human_trajectory_publisher;
 
   SMDPSolver solver;
-  LPSolver lp_solver;
-//  MCTSSolver mcts_solver;
-  MCTSRewardSolver mcts_reward_solver;
-  MCTSScalarizedSolver mcts_scalarized_solver;
 
-  bool lp_resolve;
+  bool optimal;
 
   double c1_hat;
   double c2_hat;
@@ -71,9 +66,6 @@ private:
   double time_step;
   double current_time;
   double next_decision;
-  double resolve_horizon;
-
-  double search_depth_time;
 
   double move_dur;
   double start_move_time;
@@ -86,7 +78,6 @@ private:
 
   uint8_t mode;
   std::vector<double> weights;
-  size_t search_depth;
 
   Action current_action;
   std::vector<HumanTrajectory> trajectories;

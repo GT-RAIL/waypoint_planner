@@ -250,3 +250,25 @@ bool HumanTrajectory::comparePoses(geometry_msgs::Pose p1, geometry_msgs::Pose p
     && p1.orientation.y == p2.orientation.y
     && p1.orientation.z == p2.orientation.z;
 }
+
+void HumanTrajectory::fromMsg(const waypoint_planner::HumanTrajectoryMsg &msg)
+{
+  for (size_t i = 0; i < msg.times.size(); i ++)
+  {
+    addPose(msg.times[i], msg.poses[i]);
+  }
+  sortKeys();
+}
+
+waypoint_planner::HumanTrajectoryMsg HumanTrajectory::toMsg()
+{
+  waypoint_planner::HumanTrajectoryMsg msg;
+  msg.times.resize(keys.size());
+  msg.poses.resize(keys.size());
+  for (size_t i = 0; i < keys.size(); i ++)
+  {
+    msg.times[i] = keys[i];
+    msg.poses[i] = trajectory[keys[i]];
+  }
+  return msg;
+}

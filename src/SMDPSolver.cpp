@@ -12,31 +12,6 @@ SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string waypoin
   time_step = step;
 
   loadWaypoints(waypoint_file_name);
-
-  // default weights
-  if (linearization_weights.size() == 0 && this->mode == SMDPFunctions::LINEARIZED_COST)
-  {
-    for (size_t i = 0; i < 4; i ++)
-    {
-      linearization_weights.push_back(0.25);
-    }
-  }
-
-  default_human_dims.x = 0.5;
-  default_human_dims.y = 0.4;
-  default_human_dims.z = 1.4;
-}
-
-// Deprecated with new trajectory sampling API (trajectories should be passed in instead)
-SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string trajectory_file_name,
-    string waypoint_file_name, vector<double> weights)
-{
-  this->mode = mode;
-  linearization_weights = weights;
-  time_horizon = horizon;
-  time_step = step;
-  loadTrajectory(trajectory_file_name);
-  loadWaypoints(waypoint_file_name);
   SMDPFunctions::initializeActions(waypoints, actions);
 
   // default weights
@@ -53,10 +28,9 @@ SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string traject
   default_human_dims.z = 1.4;
 }
 
-void SMDPSolver::reset(double horizon, string trajectory_file_name)
+void SMDPSolver::reset(double horizon)
 {
   time_horizon = horizon;
-  loadTrajectory(trajectory_file_name);
 }
 
 void SMDPSolver::setTrajectory(std::vector<HumanTrajectory> trajectories)
@@ -155,6 +129,7 @@ void SMDPSolver::backwardsInduction()
   // perform backwards induction for policy
   for (long t = static_cast<long>(t_end - 1); t >= 0; t --)
   {
+    std::cout << "t: " << t << std::endl;
     for (size_t i = 0; i < perch_states.size(); i ++)
     {
       vector<State> states;
@@ -168,6 +143,7 @@ void SMDPSolver::backwardsInduction()
 
       Action best_a(Action::OBSERVE);
       double best_u = std::numeric_limits<double>::lowest();
+
       for (Action a : actions)
       {
         if (!SMDPFunctions::isValidAction(perch_states[i], a))
@@ -220,6 +196,11 @@ void SMDPSolver::backwardsInduction()
           best_u = u;
           best_a = a;
         }
+
+//        if (t == 0)
+//        {
+//          std::cout << "action: " << std::to_string(a.actionType()) << "; " "u: " << u << std::endl;
+//        }
       }
 
       utility_map[i][t] = best_u;

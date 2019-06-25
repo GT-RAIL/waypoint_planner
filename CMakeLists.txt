@@ -39,12 +39,20 @@ endif()
 ## Declare ROS messages, services and actions ##
 ################################################
 
+add_message_files(
+  FILES
+  HumanTrajectoryMsg.msg
+)
+
 add_service_files(
   FILES
   ChangeTime.srv
 )
 
-generate_messages()
+generate_messages(
+  DEPENDENCIES
+  geometry_msgs
+)
 
 ###################################################
 ## Declare things to be passed to other projects ##
@@ -80,6 +88,10 @@ target_link_libraries(waypoint_tester
   ${catkin_LIBRARIES}
   yaml-cpp
 )
+add_dependencies(
+  waypoint_tester
+  ${PROJECT_NAME}_generate_messages_cpp
+)
 
 add_executable(human_simulator
   src/HumanSimulator.cpp src/EnvironmentSetup.cpp src/HumanTrajectory.cpp
@@ -106,6 +118,10 @@ add_executable(trajectory_setter
 target_link_libraries(trajectory_setter
   ${catkin_LIBRARIES}
   yaml-cpp
+)
+add_dependencies(
+  trajectory_setter
+  ${PROJECT_NAME}_generate_messages_cpp
 )
 
 add_executable(time_sampler
@@ -152,6 +168,33 @@ target_link_libraries(test_executor
   yaml-cpp
 )
 
+add_executable(test_executor_dist
+  src/TestExecutorDist.cpp
+  src/LPSolver.cpp
+  src/SMDPSolver.cpp
+  src/State.cpp
+  src/Action.cpp
+  src/EnvironmentSetup.cpp
+  src/HumanTrajectory.cpp
+  src/RewardsAndCosts.cpp
+  src/SMDPFunctions.cpp
+  src/StateWithTime.cpp
+  src/MCTSRewardSolver.cpp
+  src/MCTSScalarizedSolver.cpp
+  src/PerchState.cpp
+  src/Approximator.cpp
+)
+add_dependencies(
+  test_executor_dist
+  ${PROJECT_NAME}_generate_messages_cpp
+)
+target_link_libraries(test_executor_dist
+  ${catkin_LIBRARIES}
+  ${lpsolve_LIBRARIES}
+  ${TORCH_LIBRARIES}
+  yaml-cpp
+)
+
 add_executable(data_manager
   src/DataManager.cpp
   src/Action.cpp
@@ -165,10 +208,10 @@ target_link_libraries(data_manager
   ${TORCH_LIBRARIES}
   yaml-cpp
 )
-#add_dependencies(
-#        data_manager
-#        ${PROJECT_NAME}_generate_messages_cpp
-#)
+add_dependencies(
+        data_manager
+        ${PROJECT_NAME}_generate_messages_cpp
+)
 
 #add_executable(example-app src/Approximator.cpp)
 #target_link_libraries(example-app ${TORCH_LIBRARIES} ${catkin_LIBRARIES})

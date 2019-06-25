@@ -12,8 +12,8 @@ const uint8_t TestExecutor::MCTS_CONSTRAINED = 3;
 const uint8_t TestExecutor::MCTS_SCALARIZED = 4;
 
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
-    size_t search_depth, string trajectory_file, bool lp_resolve, double resolve_horizon) :
-    solver(horizon, step, mode, trajectory_file, "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
+    size_t search_depth, string trajectory_file, size_t trajectory_samples, bool lp_resolve, double resolve_horizon) :
+    solver(horizon, step, mode, "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
     lp_solver(horizon, step, trajectory_file, "iss_waypoints.csv"),    // TODO: parameters here for optional values
 //    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
 //        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
@@ -45,7 +45,16 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
   }
 
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
-  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
+  trajectories.clear();
+  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, trajectory_samples);
+  vector<HumanTrajectory> eval_samples;
+  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1);
+  eval_trajectory = eval_samples[0];
+
+  if (approach == TestExecutor::SMDP)
+  {
+    solver.setTrajectory(trajectories);
+  }
 
   default_human_dims.x = 0.5;
   default_human_dims.y = 0.4;
@@ -132,7 +141,7 @@ bool TestExecutor::reset(double horizon, string trajectory_file, string lp_model
 {
   if (approach == TestExecutor::SMDP)
   {
-    solver.reset(horizon, trajectory_file);
+    solver.reset(horizon);
   }
   else if (approach == TestExecutor::LP_SOLVE || approach == TestExecutor::LP_LOAD)
   {
@@ -155,23 +164,36 @@ bool TestExecutor::reset(double horizon, string trajectory_file, string lp_model
     cout << "\tc1_hat: " << c1_hat << ", c2_hat: " << c2_hat << ", c3_hat: " << c3_hat << endl;
   }
 
-  if (randomize_trajectory)
+  // TODO: re-implement this with new trajectory sampling
+//  if (randomize_trajectory)
+//  {
+//    // TODO: this is only implemented for lp_solver right now!
+//    if (approach == TestExecutor::LP_SOLVE)
+//    {
+//      trajectory = lp_solver.getTrajectory();
+//    }
+//    else
+//    {
+//      string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
+//      trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
+//    }
+//  }
+//  else
+//  {
+//    string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
+//    trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
+//  }
+
+  string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
+  trajectories.clear();
+  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, trajectories.size());
+  vector<HumanTrajectory> eval_samples;
+  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1);
+  eval_trajectory = eval_samples[0];
+
+  if (approach == TestExecutor::SMDP)
   {
-    // TODO: this is only implemented for lp_solver right now!
-    if (approach == TestExecutor::LP_SOLVE)
-    {
-      trajectory = lp_solver.getTrajectory();
-    }
-    else
-    {
-      string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
-      trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
-    }
-  }
-  else
-  {
-    string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
-    trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path);
+    solver.setTrajectory(trajectories);
   }
 
   // TODO: better state initialization
@@ -461,11 +483,11 @@ bool TestExecutor::run(double sim_step, string log_name)
     next_decision = current_time + duration;
     ROS_INFO("Action duration: %f", duration);
 
-    double r0 = RewardsAndCosts::reward_recognition(trajectory.getPose(current_time),
+    double r0 = RewardsAndCosts::reward_recognition(eval_trajectory.getPose(current_time),
         default_human_dims, state.waypoint)*duration;
-    double c1_0 = RewardsAndCosts::cost_collision(trajectory.getPose(current_time), default_human_dims,
+    double c1_0 = RewardsAndCosts::cost_collision(eval_trajectory.getPose(current_time), default_human_dims,
         state.waypoint)*duration;
-    double c2_0 = RewardsAndCosts::cost_intrusion(trajectory.getPose(current_time), state.waypoint, state.perched)*duration;
+    double c2_0 = RewardsAndCosts::cost_intrusion(eval_trajectory.getPose(current_time), state.waypoint, state.perched)*duration;
     double c3_0 = RewardsAndCosts::cost_power(state.perched, current_action)*duration;
     if (approach == MCTS_CONSTRAINED)
     {
@@ -515,11 +537,11 @@ bool TestExecutor::run(double sim_step, string log_name)
     // log data, in the form:
     //  action type, goal x, goal y, goal z, c1 remaining, c2 remaining, c3 remaining, current x, current y, current z,
     //  perched, [remaining human trajectory: x, y, z, qx, qy, qz, qw, ...]
-    trajectory.getPose(0);
+    eval_trajectory.getPose(0);
     std::stringstream traj_stream;
     for (double t_remaining = current_time; t_remaining < time_horizon; t_remaining += time_step)
     {
-      geometry_msgs::Pose traj_remaining_pose = trajectory.getPose(t_remaining);
+      geometry_msgs::Pose traj_remaining_pose = eval_trajectory.getPose(t_remaining);
       traj_stream << traj_remaining_pose.position.x << "," << traj_remaining_pose.position.y << ","
         << traj_remaining_pose.position.z << "," << traj_remaining_pose.orientation.x << ","
         << traj_remaining_pose.orientation.y << "," << traj_remaining_pose.orientation.z << ","
@@ -591,13 +613,13 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
 
-  Approximator a;
-  return EXIT_SUCCESS;
-
   vector<double> weights{1, 300, 300};
-  TestExecutor te(176, 2.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
+
+  TestExecutor te(176, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_times.yaml");
+  // Old testing runs:
+//  TestExecutor te(176, 2.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
 //  TestExecutor te(176, 2.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml", true, 170);
-  TestExecutor te_repeat(176, 2.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
+//  TestExecutor te_repeat(176, 2.0, TestExecutor::LP_LOAD, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
 //  vector<double> weights{0.27, -0.34, -0.17, -0.22};
 //  TestExecutor te(176, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
 //  TestExecutor te_repeat(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, 180, "inspection_trajectory1.yaml");
@@ -629,22 +651,22 @@ int main(int argc, char **argv)
                              172, 174, 189, 165, 181};
 
   ros::Rate loop_rate(100000000);
-//  //TODO: uncomment here for single run
-//  te.reset(176, "inspection_trajectory1.yaml", "resolve_testing", false);
-//  while (ros::ok())
-//  {
-//    ros::spinOnce();
-////    if (te.run(0.0333333333333))
+  //TODO: uncomment here for single run
+  te.reset(180, "inspection_trajectory1.yaml", "resolve_testing", false);
+  while (ros::ok())
+  {
+    ros::spinOnce();
 //    if (te.run(0.0333333333333))
-////    if (te_repeat.run(0.01))
-//    {
-//      break;
-//    }
-//    loop_rate.sleep();
-//  }
-//
-//  te.reportResults();
-//  return EXIT_SUCCESS;
+    if (te.run(0.0333333333333))
+//    if (te_repeat.run(0.01))
+    {
+      break;
+    }
+    loop_rate.sleep();
+  }
+
+  te.reportResults();
+  return EXIT_SUCCESS;
 
 //  //TODO: uncomment here for testing one run on all trajectories
 //  vector<double> results_r;
@@ -809,97 +831,97 @@ int main(int argc, char **argv)
 //
 //  cout << "Finished all trials." << endl;
 
-  //TODO: uncomment here for logging LP solutions over varied data
-  vector<double> results_r;
-  vector<double> results_c1;
-  vector<double> results_c2;
-  vector<double> results_c3;
-
-  ros::Time start_time = ros::Time::now();
-  for (size_t trials = 0; trials < 16; trials ++)
-  {
-    ROS_INFO("Start of trial %lu", trials);
-    results_r.resize(results_r.size() + trajectory_files.size());
-    results_c1.resize(results_c1.size() + trajectory_files.size());
-    results_c2.resize(results_c2.size() + trajectory_files.size());
-    results_c3.resize(results_c3.size() + trajectory_files.size());
-
-    for (unsigned int i = 0; i < trajectory_files.size(); i++)
-    {
-      te.randomizeWeights();
-      if (!te.reset(horizons[i], trajectory_files[i], trajectory_files[i], true, true))
-      {
-        bool lp_solved = false;
-        for (int attempt = 1; attempt < 3; attempt++)
-        {
-          lp_solved = te.retryLP(attempt);
-          if (lp_solved)
-          {
-            break;
-          }
-        }
-        if (!lp_solved)
-        {
-          cout << "\n\n\nAll Results: (" << i << " x" << trials + 1 << ")" << endl;
-          cout << "(r, c1, c2, c3)" << endl;
-          for (size_t j = 0; j < results_r.size(); j++)
-          {
-            cout << results_r[j] << "," << results_c1[j] << "," << results_c2[j] << "," << results_c3[j] << "," << endl;
-          }
-          te.freeLP();
-          continue;
-        }
-      }
-
-      string log_file;
-      if (i < 5)
-      {
-        log_file = "log_experiment.txt";
-      }
-      else if (i < 10)
-      {
-        log_file = "log_inspection.txt";
-      }
-      else if (i < 15)
-      {
-        log_file = "log_pick_place.txt";
-      }
-
-      while (ros::ok())
-      {
-        ros::spinOnce();
-        //    if (te.run(0.0333333333333))
-        if (te.run(0.01, log_file))
-        {
-          break;
-        }
-        loop_rate.sleep();
-      }
-
-      te.reportResults();
-      results_r[trials*trajectory_files.size() + i] += te.r;
-      results_c1[trials*trajectory_files.size() + i] += te.c1;
-      results_c2[trials*trajectory_files.size() + i] += te.c2;
-      results_c3[trials*trajectory_files.size() + i] += te.c3;
-
-      cout << "\n\n\nAll Results: (" << i << " x" << trials + 1 << ")" << endl;
-      cout << "(r, c1, c2, c3)" << endl;
-      for (size_t j = 0; j < results_r.size(); j++)
-      {
-        cout << results_r[j] << "," << results_c1[j] << "," << results_c2[j] << "," << results_c3[j] << "," << endl;
-      }
-    }
-  }
-
-  cout << "\n\n\nFinal Results:" << endl;
-  cout << "(r, c1, c2, c3)" << endl;
-  for (size_t j = 0; j < results_r.size(); j ++)
-  {
-    cout << results_r[j] << "," << results_c1[j] << "," << results_c2[j] << "," << results_c3[j] << "," << endl;
-  }
-
-  cout << "Finished all trials." << endl;
-  cout << "Full duration: " << (ros::Time::now() - start_time).toSec() << endl;
+//  //TODO: uncomment here for logging LP solutions over varied data
+//  vector<double> results_r;
+//  vector<double> results_c1;
+//  vector<double> results_c2;
+//  vector<double> results_c3;
+//
+//  ros::Time start_time = ros::Time::now();
+//  for (size_t trials = 0; trials < 16; trials ++)
+//  {
+//    ROS_INFO("Start of trial %lu", trials);
+//    results_r.resize(results_r.size() + trajectory_files.size());
+//    results_c1.resize(results_c1.size() + trajectory_files.size());
+//    results_c2.resize(results_c2.size() + trajectory_files.size());
+//    results_c3.resize(results_c3.size() + trajectory_files.size());
+//
+//    for (unsigned int i = 0; i < trajectory_files.size(); i++)
+//    {
+//      te.randomizeWeights();
+//      if (!te.reset(horizons[i], trajectory_files[i], trajectory_files[i], true, true))
+//      {
+//        bool lp_solved = false;
+//        for (int attempt = 1; attempt < 3; attempt++)
+//        {
+//          lp_solved = te.retryLP(attempt);
+//          if (lp_solved)
+//          {
+//            break;
+//          }
+//        }
+//        if (!lp_solved)
+//        {
+//          cout << "\n\n\nAll Results: (" << i << " x" << trials + 1 << ")" << endl;
+//          cout << "(r, c1, c2, c3)" << endl;
+//          for (size_t j = 0; j < results_r.size(); j++)
+//          {
+//            cout << results_r[j] << "," << results_c1[j] << "," << results_c2[j] << "," << results_c3[j] << "," << endl;
+//          }
+//          te.freeLP();
+//          continue;
+//        }
+//      }
+//
+//      string log_file;
+//      if (i < 5)
+//      {
+//        log_file = "log_experiment.txt";
+//      }
+//      else if (i < 10)
+//      {
+//        log_file = "log_inspection.txt";
+//      }
+//      else if (i < 15)
+//      {
+//        log_file = "log_pick_place.txt";
+//      }
+//
+//      while (ros::ok())
+//      {
+//        ros::spinOnce();
+//        //    if (te.run(0.0333333333333))
+//        if (te.run(0.01, log_file))
+//        {
+//          break;
+//        }
+//        loop_rate.sleep();
+//      }
+//
+//      te.reportResults();
+//      results_r[trials*trajectory_files.size() + i] += te.r;
+//      results_c1[trials*trajectory_files.size() + i] += te.c1;
+//      results_c2[trials*trajectory_files.size() + i] += te.c2;
+//      results_c3[trials*trajectory_files.size() + i] += te.c3;
+//
+//      cout << "\n\n\nAll Results: (" << i << " x" << trials + 1 << ")" << endl;
+//      cout << "(r, c1, c2, c3)" << endl;
+//      for (size_t j = 0; j < results_r.size(); j++)
+//      {
+//        cout << results_r[j] << "," << results_c1[j] << "," << results_c2[j] << "," << results_c3[j] << "," << endl;
+//      }
+//    }
+//  }
+//
+//  cout << "\n\n\nFinal Results:" << endl;
+//  cout << "(r, c1, c2, c3)" << endl;
+//  for (size_t j = 0; j < results_r.size(); j ++)
+//  {
+//    cout << results_r[j] << "," << results_c1[j] << "," << results_c2[j] << "," << results_c3[j] << "," << endl;
+//  }
+//
+//  cout << "Finished all trials." << endl;
+//  cout << "Full duration: " << (ros::Time::now() - start_time).toSec() << endl;
 
   return EXIT_SUCCESS;
 }

@@ -30,9 +30,20 @@ HumanSimulator::HumanSimulator() :
   human_marker_publisher = pnh.advertise<visualization_msgs::Marker>("human_marker", 1, this);
   human_markers_publisher = pnh.advertise<visualization_msgs::MarkerArray>("human_markers", 1, this);
   task_markers_publisher = pnh.advertise<visualization_msgs::MarkerArray>("task_markers", 1, this);
-  time_update_subscriber = pnh.subscribe<std_msgs::Float32>("time_update", 0, &HumanSimulator::timeUpdateCallback, this);
+  time_update_subscriber = pnh.subscribe<std_msgs::Float32>("time_update", 0, &HumanSimulator::timeUpdateCallback,
+      this);
+  trajectory_update_subscriber = pnh.subscribe<waypoint_planner::HumanTrajectoryMsg>("trajectory_update", 0,
+      &HumanSimulator::trajectoryUpdateCallback, this);
 
 //  createTaskMarkers(task_vis);
+}
+
+void HumanSimulator::trajectoryUpdateCallback(const waypoint_planner::HumanTrajectoryMsg::ConstPtr& msg)
+{
+  trajectories.clear();
+  HumanTrajectory traj;
+  traj.fromMsg(*msg);
+  trajectories.push_back(traj);
 }
 
 void HumanSimulator::addHumanMarker(string frame, double r, double g, double b, bool task_image)
@@ -364,7 +375,7 @@ int main(int argc, char **argv)
   {
     ros::spinOnce();
     hs.publishTFs();
-    hs.advanceTime(0.333333333333);
+//    hs.advanceTime(0.333333333333);
     loop_rate.sleep();
   }
 
