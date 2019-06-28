@@ -13,11 +13,11 @@ const uint8_t TestExecutor::MCTS_SCALARIZED = 4;
 
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
     bool optimal) :
-    solver(horizon, step, mode, "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
+    solver(horizon, step, mode, "iss_waypoints.csv", weights),
+    lp_solver(horizon, step),
     current_action(Action::OBSERVE),
     pnh("~")
 {
-
   srand(time(NULL));
 
   this->approach = approach;
@@ -141,6 +141,10 @@ void TestExecutor::setTrajectories(std::vector<HumanTrajectory> trajectories)
   {
     solver.setTrajectory(trajectories);
   }
+  else if (approach == TestExecutor::LP_SOLVE || TestExecutor::LP_LOAD)
+  {
+    lp_solver.setTrajectory(trajectories);
+  }
 }
 
 void TestExecutor::setEvalTrajectory(HumanTrajectory eval_trajectory)
@@ -156,6 +160,52 @@ bool TestExecutor::solve()
     solver.backwardsInduction();
     ROS_INFO("Policy computed.");
   }
+  else if (this->approach == LP_SOLVE)
+  {
+    lp_solver.constructModel(weights);
+    ros::Time start_time = ros::Time::now();
+    lp_solver.setScaling(0, true);  // TODO: this is only here for scaling mode testing
+    if (lp_solver.solveModel(800))
+    {
+      ROS_INFO("LP solved.");
+      std::ofstream log_file;
+      log_file.open("solve_times.txt", std::ios::out | std::ios::app);
+      log_file << "\tSolve time: " << (ros::Time::now() - start_time).toSec() << "; scaling mode: " << 0 << endl;
+      log_file.close();
+      cout << "Solve time: " << (ros::Time::now() - start_time).toSec() << endl;
+    }
+    else
+    {
+      // try some different parameters
+      bool lp_solved = false;
+      for (int attempt = 1; attempt < 5; attempt ++)
+      {
+        lp_solver.setScaling(0, true);  // TODO: this is only here for scaling mode testing
+//        lp_solver.setScaling(attempt);
+        start_time = ros::Time::now();
+        lp_solved = lp_solver.solveModel(800);
+        if (lp_solved)
+        {
+          std::ofstream log_file;
+          log_file.open("solve_times.txt", std::ios::out | std::ios::app);
+          log_file << "\tSolve time: " << (ros::Time::now() - start_time).toSec() << "; scaling mode: " << attempt << endl;
+          log_file.close();
+          cout << "Solve time: " << (ros::Time::now() - start_time).toSec() << endl;
+          break;
+        }
+      }
+      if (!lp_solved)
+      {
+        ROS_INFO("Could not solve LP.");
+        return false;
+      }
+    }
+  }
+  else if (this->approach == LP_LOAD)
+  {
+    lp_solver.loadModel("var_results.txt");
+    ROS_INFO("Model loaded.");
+  }
 
   return true;
 }
@@ -166,7 +216,7 @@ bool TestExecutor::run(double sim_step, bool vis)
   {
     if (current_action.actionType() == Action::MOVE)
     {
-      ROS_INFO("Move action complete.");
+//      ROS_INFO("Move action complete.");
       state.waypoint = current_action.actionGoal();
       robot_marker.pose.position = state.waypoint;
       robot_marker.color.r = 1.0;
@@ -207,11 +257,15 @@ bool TestExecutor::run(double sim_step, bool vis)
     {
       current_action = solver.getAction(state, current_time);
     }
+    else if (approach == LP_SOLVE || approach == LP_LOAD)
+    {
+      current_action = lp_solver.getAction(state, current_time);
+    }
 
     geometry_msgs::Point goal;
     if (current_action.actionType() == Action::MOVE)
     {
-      ROS_INFO("Starting move action.");
+//      ROS_INFO("Starting move action.");
       goal = current_action.actionGoal();
       robot_marker.color.r = 1.0;
       robot_marker.color.g = 0.5;
@@ -224,7 +278,7 @@ bool TestExecutor::run(double sim_step, bool vis)
     }
     else if (current_action.actionType() == Action::PERCH)
     {
-      ROS_INFO("Starting perch action.");
+//      ROS_INFO("Starting perch action.");
       goal = state.waypoint;
       robot_marker.color.r = 0.0;
       robot_marker.color.g = 1.0;
@@ -237,7 +291,7 @@ bool TestExecutor::run(double sim_step, bool vis)
     }
     else if (current_action.actionType() == Action::UNPERCH)
     {
-      ROS_INFO("Starting unperch action.");
+//      ROS_INFO("Starting unperch action.");
       goal = state.waypoint;
       robot_marker.color.r = 1.0;
       robot_marker.color.g = 0.0;
@@ -250,7 +304,7 @@ bool TestExecutor::run(double sim_step, bool vis)
     }
     else
     {
-      ROS_INFO("Observing.");
+//      ROS_INFO("Observing.");
       goal = state.waypoint;
     }
 
@@ -284,7 +338,7 @@ bool TestExecutor::run(double sim_step, bool vis)
     }
 
     next_decision = current_time + duration;
-    ROS_INFO("Action duration: %f", duration);
+//    ROS_INFO("Action duration: %f", duration);
 
     double r0 = RewardsAndCosts::reward_recognition(eval_trajectory.getPose(current_time),
         default_human_dims, state.waypoint)*duration;
@@ -307,8 +361,8 @@ bool TestExecutor::run(double sim_step, bool vis)
     }
     c3 += c3_0;  // this accumulates for every action
 
-    std::cout << "Time: " << current_time << "\tReward: " << r << ", C1: " << c1 << ", C2: " << c2 << ", C3: " << c3
-      << std::endl;
+//    std::cout << "Time: " << current_time << "\tReward: " << r << ", C1: " << c1 << ", C2: " << c2 << ", C3: " << c3
+//      << std::endl;
   }
 
   // update fake execution time
@@ -356,45 +410,63 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
 
-  vector<double> weights{1, -.333, -.333, -.333};
-
   // initialize a solver over a trajectory distribution, and a best-case evaluation solver (i.e. trajectory known)
-  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
-  TestExecutor te_eval(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, true);
+  // MOMDP linear scalarization test
+//  vector<double> weights{1, -.333, -.333, -.333};
+//  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
+//  TestExecutor te_eval(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, true);
+  // CMDP lp test
+  vector<double> weights{1, 40, 40};
+  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights);
+  TestExecutor te_eval(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, true);
 
   // set up containers for trajectory sampling
   vector<HumanTrajectory> trajectories;
   HumanTrajectory eval_trajectory;
-  size_t num_trajectory_samples = 100;
+  size_t num_trajectory_samples = 10;
 
   // set up list of tasks
   vector<string> trajectory_seeds = {"experiment_times.yaml", "inspection_times.yaml", "pick_place_times.yaml"};
   vector<double> horizons = {180, 180, 180};
 
-  ros::Rate loop_rate(100);
+  ros::Rate loop_rate(100000);
 
-  // set a new task
-  string trajectory_file = trajectory_seeds[2];
-  te.reset(horizons[0]);
-  te_eval.reset(horizons[0]);
+  while (true)
+  {
+    // set a new task
+    string trajectory_file = trajectory_seeds[floor(3.0 * static_cast<double>(rand()) / RAND_MAX)];
+    te.reset(horizons[0]);
+    te_eval.reset(horizons[0]);
 
-  // sample a new set of trajectories, and an evaluation trajectory
-  string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
-  trajectories.clear();
-  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_trajectory_samples);
-  vector<HumanTrajectory> eval_samples;
-  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1);
-  eval_trajectory = eval_samples[0];
+    std::ofstream log_file;
+    log_file.open("solve_times.txt", std::ios::out | std::ios::app);
+    log_file << "\n\n" << trajectory_file << endl;
+    log_file.close();
 
-  // update solver with new trajectories
-  te.setTrajectories(trajectories);
-  te.setEvalTrajectory(eval_trajectory);
-  te_eval.setTrajectories(eval_samples);
-  te_eval.setEvalTrajectory(eval_trajectory);
+    // sample a new set of trajectories, and an evaluation trajectory
+    string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
+    trajectories.clear();
+    EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_trajectory_samples);
+    vector<HumanTrajectory> eval_samples;
+    EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1);
+    eval_trajectory = eval_samples[0];
 
-  // solve for policy
-  te.solve();
-  te_eval.solve();
+    // update solver with new trajectories
+    te.setTrajectories(trajectories);
+    te.setEvalTrajectory(eval_trajectory);
+    te_eval.setTrajectories(eval_samples);
+    te_eval.setEvalTrajectory(eval_trajectory);
+
+    // solve for policy
+    if (!te.solve())
+    {
+      ROS_INFO("Solve failed for multiple sampled trajectories");
+    }
+    if (!te_eval.solve())
+    {
+      ROS_INFO("Solve failed for single sampled trajectory");
+    }
+  }
 
   while (ros::ok())
   {

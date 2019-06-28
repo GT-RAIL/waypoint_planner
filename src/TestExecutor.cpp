@@ -14,7 +14,7 @@ const uint8_t TestExecutor::MCTS_SCALARIZED = 4;
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
     size_t search_depth, string trajectory_file, size_t trajectory_samples, bool lp_resolve, double resolve_horizon) :
     solver(horizon, step, mode, "iss_waypoints.csv", weights),    // TODO: parameters here for optional values
-    lp_solver(horizon, step, trajectory_file, "iss_waypoints.csv"),    // TODO: parameters here for optional values
+    lp_solver(horizon, step, "iss_waypoints.csv"),    // TODO: parameters here for optional values
 //    mcts_solver(horizon, step, "iss_trajectory.yaml", "iss_waypoints.csv", {1.0, 75.0}, 150.0,
 //        static_cast<size_t>(horizon/step), 2.0),  // TODO: parameters here for optional values
     mcts_reward_solver(horizon, step, trajectory_file, "iss_waypoints.csv", weights, 30.0,
@@ -145,7 +145,7 @@ bool TestExecutor::reset(double horizon, string trajectory_file, string lp_model
   }
   else if (approach == TestExecutor::LP_SOLVE || approach == TestExecutor::LP_LOAD)
   {
-    lp_solver.reset(horizon, trajectory_file, lp_model, randomize_trajectory);
+    lp_solver.reset(horizon, lp_model);
   }
   else if (approach == TestExecutor::MCTS_CONSTRAINED)
   {

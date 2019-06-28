@@ -54,6 +54,7 @@ private:
   ros::Publisher human_trajectory_publisher;
 
   SMDPSolver solver;
+  LPSolver lp_solver;
 
   bool optimal;
 

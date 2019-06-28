@@ -20,10 +20,9 @@
 class LPSolver
 {
 public:
-  LPSolver(double horizon, double step, std::string trajectory_file_name="iss_trajectory.yaml",
-      std::string waypoint_file_name="iss_waypoints.csv");
+  LPSolver(double horizon, double step, std::string waypoint_file_name="iss_waypoints.csv");
 
-  void loadTrajectory(std::string file_name, bool randomize_trajectory=false);
+  void setTrajectory(std::vector<HumanTrajectory> trajectories);
 
   void loadWaypoints(std::string file_name);
 
@@ -31,7 +30,7 @@ public:
 
   void constructModel(std::vector<double> total_costs, PerchState s0);
 
-  void setScaling(int scaling_type);
+  void setScaling(int scaling_type, bool random=false);
 
   bool solveModel(double timeout);
 
@@ -43,12 +42,9 @@ public:
 
   Action getAction(PerchState s, size_t t);
 
-  void reset(double horizon, std::string trajectory_file_name, std::string output_file_modifier="results",
-      bool randomize_trajectory=false);
+  void reset(double horizon, std::string output_file_modifier="results");
 
   void resolve(double horizon, double step, size_t t0);
-
-  HumanTrajectory getTrajectory();
 
 private:
   std::vector<geometry_msgs::Point> waypoints;
@@ -63,7 +59,7 @@ private:
   std::vector< std::vector< std::vector<size_t> > > index_map;  // index_map[state_id][time_step][action_id]=i for ys[i]
   size_t num_variables;
 
-  HumanTrajectory trajectory;
+  std::vector<HumanTrajectory> trajectories;
 
   double time_horizon;
   double time_step;

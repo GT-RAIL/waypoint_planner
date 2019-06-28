@@ -5,7 +5,7 @@ using std::vector;
 using std::cout;
 using std::endl;
 
-LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, string waypoint_file_name)
+LPSolver::LPSolver(double horizon, double step, string waypoint_file_name)
 {
   t0 = 0;
   time_horizon = horizon;
@@ -16,7 +16,6 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
 
   cout << "Setting time scale to end at time index: " << t_end << endl;
 
-  loadTrajectory(move(trajectory_file_name));
   loadWaypoints(move(waypoint_file_name));
   cout << "Loaded " << waypoints.size() << " waypoints." << endl;
 
@@ -71,8 +70,12 @@ LPSolver::LPSolver(double horizon, double step, string trajectory_file_name, str
   default_human_dims.z = 1.4;
 }
 
-void LPSolver::reset(double horizon, std::string trajectory_file_name, string output_file_modifier,
-    bool randomize_trajectory)
+void LPSolver::setTrajectory(std::vector<HumanTrajectory> trajectories)
+{
+  this->trajectories = trajectories;
+}
+
+void LPSolver::reset(double horizon, string output_file_modifier)
 {
   t0 = 0;
   time_horizon = horizon;
@@ -81,8 +84,6 @@ void LPSolver::reset(double horizon, std::string trajectory_file_name, string ou
   this->output_file_modifier = output_file_modifier;
 
   cout << "Setting time scale to end at time index: " << t_end << endl;
-
-  loadTrajectory(move(trajectory_file_name), randomize_trajectory);
 
   // initialize list of states
 
@@ -190,12 +191,19 @@ void LPSolver::constructModel(vector<double> total_costs, PerchState s0)
 
   // define objective function
   REAL row[1 + num_variables];
+  for (unsigned int i = 0; i < num_variables + 1; i ++)
+  {
+    row[i] = 0;
+  }
   for (size_t i = 0; i < states.size(); i++)
   {
     for (size_t j = 0; j < actions.size(); j ++)
     {
       // note: lp_solve API uses 1-indexing, so all row indices have +1 at the end
-      row[getIndex(i, j) + 1] = reward(i, j, SMDPFunctions::REWARD);
+      if (isValidAction(i, j))
+      {
+        row[getIndex(i, j) + 1] = reward(i, j, SMDPFunctions::REWARD);
+      }
     }
   }
   set_obj_fn(lp, row);
@@ -287,6 +295,32 @@ void LPSolver::constructModel(vector<double> total_costs, PerchState s0)
       b = 1;
     }
     add_constraint(lp, crow, EQ, b);
+
+//    // Temporary debugging for manual scaling
+//    double min_val = std::numeric_limits<double>::infinity();
+//    double max_val = std::numeric_limits<double>::lowest();
+//    double abs_min_val = std::numeric_limits<double>::infinity();
+//    for (size_t n = 1; n < 1 + num_variables; n ++)
+//    {
+//      if (crow[n] < min_val && crow[n] != 0)
+//      {
+//        min_val = crow[n];
+//      }
+//      if (crow[n] > max_val && crow[n] != 0)
+//      {
+//        max_val = crow[n];
+//      }
+//      if (fabs(crow[n]) < abs_min_val && crow[n] != 0)
+//      {
+//        abs_min_val = fabs(crow[n]);
+//      }
+//    }
+//    if (min_val != 0 && min_val != std::numeric_limits<double>::infinity() && max_val != 0
+//      && max_val != std::numeric_limits<double>::lowest())
+//    {
+//      cout << "i: " << i << ",\tmin: " << min_val << ",\tmax: " << max_val << ",\tclosest to zero: " << abs_min_val
+//        << endl;
+//    }
   }
   cout << "State occupancy constraints added." << endl;
 
@@ -307,28 +341,113 @@ void LPSolver::constructModel(vector<double> total_costs, PerchState s0)
 //  set_scaling(lp, SCALE_MEAN | SCALE_LOGARITHMIC | SCALE_INTEGERS);
   set_scaling(lp, SCALE_MEAN | SCALE_INTEGERS);
 
+//  set_simplextype(lp, SIMPLEX_DUAL_DUAL);
+  set_pivoting(lp, PRICER_STEEPESTEDGE | PRICE_ADAPTIVE);
+//  set_pivoting(lp, PRICER_DEVEX);
+//  set_pivoting(lp, PRICER_DANTZIG | PRICE_ADAPTIVE);
   // note: all variables must be >= 0 by default, so this constraint doesn't have to be added
   cout << "LP model constructed successfully!" << endl;
 
 //  free(row);
 }
 
-void LPSolver::setScaling(int scaling_type)
+void LPSolver::setScaling(int scaling_type, bool random)
 {
-  if (scaling_type == 0)
+  unscale(lp);
+
+  if (random)
   {
-//    set_scaling(lp, SCALE_MEAN | SCALE_LOGARITHMIC | SCALE_INTEGERS);
-    set_scaling(lp, SCALE_MEAN | SCALE_INTEGERS);
-  }
-  else if (scaling_type == 1)
-  {
-//    set_scaling(lp, SCALE_GEOMETRIC | SCALE_INTEGERS);
-    set_scaling(lp, SCALE_GEOMETRIC | SCALE_INTEGERS);
+    double scale_type = static_cast<double>(rand()) / RAND_MAX;
+    double scale_mod = static_cast<double>(rand()) / RAND_MAX;
+    int scale_mode;
+    std::ofstream log_file;
+    log_file.open("solve_times.txt", std::ios::out | std::ios::app);
+
+    if (scale_type < 0.167)
+    {
+      scale_mode = SCALE_NONE;
+      log_file << "\nSCALE_NONE | ";
+    }
+    else if (scale_type < 2 * 0.167)
+    {
+      scale_mode = SCALE_MEAN;
+      log_file << "\nSCALE_MEAN | ";
+    }
+    else if (scale_type < 3 * 0.167)
+    {
+      scale_mode = SCALE_GEOMETRIC;
+      log_file << "\nSCALE_GEOMETRIC | ";
+    }
+    else if (scale_type < 4 * 0.167)
+    {
+      scale_mode = SCALE_EXTREME;
+      log_file << "\nSCALE_EXTREME | ";
+    }
+    else if (scale_type < 5 * 0.167)
+    {
+      scale_mode = SCALE_RANGE;
+      log_file << "\nSCALE_RANGE | ";
+    }
+    else
+    {
+      scale_mode = SCALE_CURTISREID;
+      log_file << "\nSCALE_CURTISREID | ";
+    }
+
+    if (scale_mod < 0.2)
+    {
+      scale_mode = scale_mode | SCALE_QUADRATIC;
+      log_file << "SCALE_QUADRATIC" << endl;
+    }
+    else if (scale_mod < 0.4)
+    {
+      scale_mode = scale_mode | SCALE_LOGARITHMIC;
+      log_file << "SCALE_LOGARITHMIC" << endl;
+    }
+    else if (scale_mod < 0.6)
+    {
+      scale_mode = scale_mode | SCALE_EQUILIBRATE;
+      log_file << "SCALE_EQUILIBRATE" << endl;
+    }
+    else if (scale_mod < 0.8)
+    {
+      scale_mode = scale_mode | SCALE_POWER2;
+      log_file << "SCALE_POWER2" << endl;
+    }
+    else
+    {
+      scale_mode = scale_mode;
+      log_file << "NONE" << endl;
+    }
+
+    log_file.close();
+    set_scaling(lp, scale_mode);
   }
   else
   {
+    if (scaling_type == 0)
+    {
+//    set_scaling(lp, SCALE_MEAN | SCALE_LOGARITHMIC | SCALE_INTEGERS);
+      set_scaling(lp, SCALE_MEAN);
+    }
+    else if (scaling_type == 1)
+    {
+//    set_scaling(lp, SCALE_GEOMETRIC | SCALE_INTEGERS);
+      set_scaling(lp, SCALE_GEOMETRIC);
+    }
+    else if (scaling_type == 2)
+    {
 //    set_scaling(lp, SCALE_CURTISREID | SCALE_INTEGERS);
-    set_scaling(lp, SCALE_RANGE | SCALE_LOGARITHMIC | SCALE_INTEGERS);
+      set_scaling(lp, SCALE_RANGE | SCALE_LOGARITHMIC);
+    }
+    else if (scaling_type == 3)
+    {
+      set_scaling(lp, SCALE_EXTREME | SCALE_EQUILIBRATE);
+    }
+    else if (scaling_type == 4)
+    {
+      set_scaling(lp, SCALE_MEAN | SCALE_POWER2);
+    }
   }
 }
 
@@ -471,19 +590,32 @@ void LPSolver::costConstraint(uint8_t mode, double threshold)
   }
   add_constraint(lp, crow, LE, threshold);
 
+//  double min_val = std::numeric_limits<double>::infinity();
+//  double max_val = std::numeric_limits<double>::lowest();
+//  double abs_min_val = std::numeric_limits<double>::infinity();
+//  for (size_t i = 1; i < 1 + num_variables; i ++)
+//  {
+//    if (crow[i] < min_val && crow[i] != 0)
+//    {
+//      min_val = crow[i];
+//    }
+//    if (crow[i] > max_val && crow[i] != 0)
+//    {
+//      max_val = crow[i];
+//    }
+//    if (fabs(crow[i]) < abs_min_val && crow[i] != 0)
+//    {
+//      abs_min_val = fabs(crow[i]);
+//    }
+//  }
+//  if (min_val != 0 && min_val != std::numeric_limits<double>::infinity() && max_val != 0
+//      && max_val != std::numeric_limits<double>::lowest())
+//  {
+//    cout << "cost constraint:\tmin: " << min_val << ",\tmax: " << max_val << ",\tclosest to zero: " << abs_min_val
+//      << endl;
+//  }
+
 //  free(crow);
-}
-
-void LPSolver::loadTrajectory(std::string file_name, bool randomize_trajectory)
-{
-  string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + file_name;
-
-  trajectory = EnvironmentSetup::readHumanTrajectory(trajectory_file_path, true, 0.033333, randomize_trajectory);
-}
-
-HumanTrajectory LPSolver::getTrajectory()
-{
-  return trajectory;
 }
 
 void LPSolver::loadWaypoints(string file_name)
@@ -611,10 +743,15 @@ size_t LPSolver::waypointToIndex(geometry_msgs::Point w)
 
 double LPSolver::reward(size_t state_id, size_t action_id, uint8_t mode)
 {
-  return SMDPFunctions::reward(State(perch_states[states[state_id].state_id].waypoint,
-                                     perch_states[states[state_id].state_id].perched,
-                                     trajectory.getPose(states[state_id].time_index*time_step)),
-                               actions[action_id], mode);
+  vector<State> state_list;
+  for (size_t j = 0; j < trajectories.size(); j ++)
+  {
+    State s_temp(perch_states[states[state_id].state_id].waypoint,
+                       perch_states[states[state_id].state_id].perched,
+                       trajectories[j].getPose(states[state_id].time_index*time_step));
+    state_list.push_back(s_temp);
+  }
+  return SMDPFunctions::reward(state_list, actions[action_id], mode);
 }
 
 bool LPSolver::isValidAction(size_t state_id, size_t action_id)
