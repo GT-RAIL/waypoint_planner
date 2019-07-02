@@ -406,16 +406,8 @@ void TestExecutor::reportResults()
   std::cout << "Total accumulated power cost: " << c3 << std::endl;
 }
 
-int main(int argc, char **argv)
+void collectSolveTimes()
 {
-  ros::init(argc, argv, "test_executor");
-
-  // initialize a solver over a trajectory distribution, and a best-case evaluation solver (i.e. trajectory known)
-  // MOMDP linear scalarization test
-//  vector<double> weights{1, -.333, -.333, -.333};
-//  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
-//  TestExecutor te_eval(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, true);
-  // CMDP lp test
   vector<double> weights{1, 40, 40};
   TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights);
   TestExecutor te_eval(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, true);
@@ -467,6 +459,55 @@ int main(int argc, char **argv)
       ROS_INFO("Solve failed for single sampled trajectory");
     }
   }
+}
+
+void testSingleCase(int rate)
+{
+  vector<double> weights{1, 40, 40};
+  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights);
+  TestExecutor te_eval(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, true);
+
+  // set up containers for trajectory sampling
+  vector<HumanTrajectory> trajectories;
+  HumanTrajectory eval_trajectory;
+  size_t num_trajectory_samples = 10;
+
+  // set up list of tasks
+  vector<string> trajectory_seeds = {"experiment_times.yaml", "inspection_times.yaml", "pick_place_times.yaml"};
+  vector<double> horizons = {180, 180, 180};
+
+  // set a new task
+  string trajectory_file = trajectory_seeds[floor(3.0 * static_cast<double>(rand()) / RAND_MAX)];
+  te.reset(horizons[0]);
+  te_eval.reset(horizons[0]);
+
+  // sample a new set of trajectories, and an evaluation trajectory
+  string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
+  trajectories.clear();
+  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_trajectory_samples);
+  vector<HumanTrajectory> eval_samples;
+  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1);
+  eval_trajectory = eval_samples[0];
+
+  // update solver with new trajectories
+  te.setTrajectories(trajectories);
+  te.setEvalTrajectory(eval_trajectory);
+  te_eval.setTrajectories(eval_samples);
+  te_eval.setEvalTrajectory(eval_trajectory);
+
+  // solve for policy
+  if (!te.solve())
+  {
+    ROS_INFO("Solve failed for multiple sampled trajectories");
+    return;
+  }
+  if (!te_eval.solve())
+  {
+    ROS_INFO("Solve failed for single sampled trajectory");
+    return;
+  }
+
+  ros::Rate loop_rate(rate);
 
   while (ros::ok())
   {
@@ -485,8 +526,106 @@ int main(int argc, char **argv)
   cout << endl;
   ROS_INFO("Best case results: ");
   te_eval.reportResults();
+}
 
-  return EXIT_SUCCESS;
+void testFullSet(int runs_per_task, int num_trajectory_samples)
+{
+  // Scalarization
+  vector<double> weights{1, -.333, -.333, -.333};
+  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
+  TestExecutor te_eval(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, true);
+
+//  // CMDP
+//  vector<double> weights{1, 40, 40};
+//  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights);
+//  TestExecutor te_eval(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, true);
+
+  // set up containers for trajectory sampling
+  vector<HumanTrajectory> trajectories;
+  HumanTrajectory eval_trajectory;
+
+  // set up list of tasks
+  vector<string> trajectory_seeds = {"experiment_times.yaml", "inspection_times.yaml", "pick_place_times.yaml"};
+  vector<double> horizons = {180, 180, 180};
+
+  for (size_t i = 0; i < trajectory_seeds.size(); i++)
+  {
+    for (size_t j = 0; j < runs_per_task; j ++)
+    {
+      // set a new task
+      string trajectory_file = trajectory_seeds[i];
+      te.reset(horizons[0]);
+      te_eval.reset(horizons[0]);
+
+      // sample a new set of trajectories, and an evaluation trajectory
+      string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
+      trajectories.clear();
+      EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_trajectory_samples);
+      vector<HumanTrajectory> eval_samples;
+      EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1);
+      eval_trajectory = eval_samples[0];
+
+      // update solver with new trajectories
+      te.setTrajectories(trajectories);
+      te.setEvalTrajectory(eval_trajectory);
+      te_eval.setTrajectories(eval_samples);
+      te_eval.setEvalTrajectory(eval_trajectory);
+
+      // solve for policy
+      if (!te.solve())
+      {
+        ROS_INFO("Solve failed for multiple sampled trajectories");
+        continue;
+      }
+      if (!te_eval.solve())
+      {
+        ROS_INFO("Solve failed for single sampled trajectory");
+        continue;
+      }
+
+      ros::Rate loop_rate(100000000);
+
+      while (ros::ok())
+      {
+        ros::spinOnce();
+        bool te_finished = te.run(0.0333333333333, true);
+        bool te_eval_finished = te_eval.run(0.0333333333333, true);
+        if (te_finished || te_eval_finished)
+        {
+          break;
+        }
+        loop_rate.sleep();
+      }
+
+      ROS_INFO("Results solved over distribution: ");
+      te.reportResults();
+      cout << endl;
+      ROS_INFO("Best case results: ");
+      te_eval.reportResults();
+
+      std::ofstream log_file;
+      log_file.open("solve_times-" + std::to_string(i) + ".txt", std::ios::out | std::ios::app);
+      log_file << te.r << ", " << te.c1 << ", " << te.c2 << ", " << te.c3 << ";" << te_eval.r << ", " << te_eval.c1
+        << ", " << te_eval.c2 << ", " << te_eval.c3 << endl;
+      log_file.close();
+    }
+  }
+}
+
+int main(int argc, char **argv)
+{
+  ros::init(argc, argv, "test_executor");
+
+  // initialize a solver over a trajectory distribution, and a best-case evaluation solver (i.e. trajectory known)
+  // MOMDP linear scalarization test
+//  vector<double> weights{1, -.333, -.333, -.333};
+//  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
+//  TestExecutor te_eval(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, true);
+  // CMDP lp test
+
+  collectSolveTimes();
+
+  //testSingleCase();
 
 //  //TODO: uncomment here for testing one run on all trajectories
 //  vector<double> results_r;

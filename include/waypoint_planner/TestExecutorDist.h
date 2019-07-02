@@ -90,4 +90,8 @@ private:
   uint8_t approach;
 };
 
+void collectSolveTimes();
+
+void testSingleCase(int rate=100);
+
 #endif  // WAYPOINT_PLANNER_TEST_EXECUTOR_H_

@@ -342,9 +342,9 @@ void LPSolver::constructModel(vector<double> total_costs, PerchState s0)
   set_scaling(lp, SCALE_MEAN | SCALE_INTEGERS);
 
 //  set_simplextype(lp, SIMPLEX_DUAL_DUAL);
-  set_pivoting(lp, PRICER_STEEPESTEDGE | PRICE_ADAPTIVE);
+//  set_pivoting(lp, PRICER_STEEPESTEDGE);
 //  set_pivoting(lp, PRICER_DEVEX);
-//  set_pivoting(lp, PRICER_DANTZIG | PRICE_ADAPTIVE);
+  set_pivoting(lp, PRICER_DANTZIG | PRICE_ADAPTIVE);
   // note: all variables must be >= 0 by default, so this constraint doesn't have to be added
   cout << "LP model constructed successfully!" << endl;
 
@@ -363,61 +363,41 @@ void LPSolver::setScaling(int scaling_type, bool random)
     std::ofstream log_file;
     log_file.open("solve_times.txt", std::ios::out | std::ios::app);
 
-    if (scale_type < 0.167)
-    {
-      scale_mode = SCALE_NONE;
-      log_file << "\nSCALE_NONE | ";
-    }
-    else if (scale_type < 2 * 0.167)
-    {
-      scale_mode = SCALE_MEAN;
-      log_file << "\nSCALE_MEAN | ";
-    }
-    else if (scale_type < 3 * 0.167)
+    if (scale_type < .33)
     {
       scale_mode = SCALE_GEOMETRIC;
       log_file << "\nSCALE_GEOMETRIC | ";
     }
-    else if (scale_type < 4 * 0.167)
+    else if (scale_type < .67)
     {
       scale_mode = SCALE_EXTREME;
       log_file << "\nSCALE_EXTREME | ";
     }
-    else if (scale_type < 5 * 0.167)
+    else
     {
       scale_mode = SCALE_RANGE;
       log_file << "\nSCALE_RANGE | ";
     }
-    else
-    {
-      scale_mode = SCALE_CURTISREID;
-      log_file << "\nSCALE_CURTISREID | ";
-    }
 
-    if (scale_mod < 0.2)
+    if (scale_mod < 0.25)
     {
       scale_mode = scale_mode | SCALE_QUADRATIC;
       log_file << "SCALE_QUADRATIC" << endl;
     }
-    else if (scale_mod < 0.4)
+    else if (scale_mod < 0.5)
     {
       scale_mode = scale_mode | SCALE_LOGARITHMIC;
       log_file << "SCALE_LOGARITHMIC" << endl;
     }
-    else if (scale_mod < 0.6)
+    else if (scale_mod < 0.75)
     {
       scale_mode = scale_mode | SCALE_EQUILIBRATE;
       log_file << "SCALE_EQUILIBRATE" << endl;
     }
-    else if (scale_mod < 0.8)
+    else
     {
       scale_mode = scale_mode | SCALE_POWER2;
       log_file << "SCALE_POWER2" << endl;
-    }
-    else
-    {
-      scale_mode = scale_mode;
-      log_file << "NONE" << endl;
     }
 
     log_file.close();
@@ -427,26 +407,27 @@ void LPSolver::setScaling(int scaling_type, bool random)
   {
     if (scaling_type == 0)
     {
-//    set_scaling(lp, SCALE_MEAN | SCALE_LOGARITHMIC | SCALE_INTEGERS);
-      set_scaling(lp, SCALE_MEAN);
+      set_scaling(lp, SCALE_EXTREME | SCALE_QUADRATIC);
     }
     else if (scaling_type == 1)
     {
-//    set_scaling(lp, SCALE_GEOMETRIC | SCALE_INTEGERS);
-      set_scaling(lp, SCALE_GEOMETRIC);
+      set_scaling(lp, SCALE_RANGE | SCALE_EQUILIBRATE);
     }
     else if (scaling_type == 2)
     {
-//    set_scaling(lp, SCALE_CURTISREID | SCALE_INTEGERS);
-      set_scaling(lp, SCALE_RANGE | SCALE_LOGARITHMIC);
+      set_scaling(lp, SCALE_EXTREME | SCALE_POWER2);
     }
     else if (scaling_type == 3)
     {
-      set_scaling(lp, SCALE_EXTREME | SCALE_EQUILIBRATE);
+      set_scaling(lp, SCALE_GEOMETRIC | SCALE_QUADRATIC);
     }
     else if (scaling_type == 4)
     {
-      set_scaling(lp, SCALE_MEAN | SCALE_POWER2);
+      set_scaling(lp, SCALE_GEOMETRIC | SCALE_EQUILIBRATE);
+    }
+    else if (scaling_type == 5)
+    {
+      set_scaling(lp, SCALE_CURTISREID | SCALE_POWER2);
     }
   }
 }
