@@ -27,6 +27,8 @@ public:
 
     void randomizeWeights();
 
+    void setWeights(std::vector<double> weights);
+
     void reset(double horizon);
 
     void setTrajectories(std::vector<HumanTrajectory> trajectories);
@@ -35,7 +37,7 @@ public:
 
     bool solve();
 
-    bool run(double sim_step, bool vis=true);
+    int run(double sim_step, bool vis=true);
 
     void reportResults();
 
@@ -92,6 +94,7 @@ private:
 
 void collectSolveTimes();
 
-void testSingleCase(int rate=100);
+void testSingleCase(int rate=100, bool tuning_mode=false);
+
 
 #endif  // WAYPOINT_PLANNER_TEST_EXECUTOR_H_

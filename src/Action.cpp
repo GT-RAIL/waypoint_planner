@@ -4,6 +4,7 @@ const uint8_t Action::OBSERVE = 0;
 const uint8_t Action::MOVE = 1;
 const uint8_t Action::PERCH = 2;
 const uint8_t Action::UNPERCH = 3;
+const uint8_t Action::NO_ACTION = 255;
 
 using std::vector;
 

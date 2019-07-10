@@ -1,5 +1,7 @@
 #include "waypoint_planner/HumanTrajectory.h"
 
+using std::vector;
+
 HumanTrajectory::HumanTrajectory()
 {
   srand(time(NULL));
@@ -14,6 +16,179 @@ void HumanTrajectory::addPose(double time, geometry_msgs::Pose pose)
 void HumanTrajectory::sortKeys()
 {
   std::sort(keys.begin(), keys.end());
+}
+
+//TODO: add intermediate points first, spline and interpolate in a separate function
+void HumanTrajectory::perturbTrajectory(double chance)
+{
+  long seed = std::chrono::system_clock::now().time_since_epoch().count();
+  std::mt19937 gen(seed);  // random seed
+
+  std::uniform_real_distribution<double> perturb_chance_dst(0, 1);
+
+  sortKeys();
+
+  for (size_t i = 0; i < keys.size() - 1; i ++)
+  {
+    if (comparePoses(trajectory[keys[i]], trajectory[keys[i + 1]]))
+    {
+      continue;
+    }
+
+    double t1 = keys[i];
+    double t2 = keys[i + 1];
+    double segment_length = t2 - t1;
+    geometry_msgs::Pose p1 = trajectory[t1];
+    geometry_msgs::Pose p2 = trajectory[t2];
+    if (segment_length >= 10)
+    {
+      if (perturb_chance_dst(gen) > chance)
+      {
+        std::cout << "skipping perturbation." << std::endl;
+        continue;
+      }
+      else
+      {
+        std::cout << "perturbing arc." << std::endl;
+      }
+
+      std::uniform_real_distribution<double> time_dst(1, t2 - t1 - 1);
+      double dt = time_dst(gen);
+
+      // perform interpolation
+      geometry_msgs::Pose add_pose;
+      double percentage = dt/segment_length;
+
+      // interpolate position
+      add_pose.position.x = p1.position.x + percentage*(p2.position.x - p1.position.x);
+      add_pose.position.y = p1.position.y + percentage*(p2.position.y - p1.position.y);
+      add_pose.position.z = p1.position.z + percentage*(p2.position.z - p1.position.z);
+
+      // interpolate (slerp) rotation
+      btQuaternion q1(p1.orientation.x, p1.orientation.y, p1.orientation.z, p1.orientation.w);
+      btQuaternion q2(p2.orientation.x, p2.orientation.y, p2.orientation.z, p2.orientation.w);
+      btQuaternion q_slerp = q1.slerp(q2, percentage);
+      add_pose.orientation.w = q_slerp.w();
+      add_pose.orientation.x = q_slerp.x();
+      add_pose.orientation.y = q_slerp.y();
+      add_pose.orientation.z = q_slerp.z();
+
+      // randomize the intermediate keypoint
+      add_pose.position.x += (2*static_cast<double>(rand())/RAND_MAX - 1)*.08*segment_length;
+      add_pose.position.y += (2*static_cast<double>(rand())/RAND_MAX - 1)*.08*segment_length;
+      add_pose.position.z += (2*static_cast<double>(rand())/RAND_MAX - 1)*.08*segment_length;
+      keys.insert(keys.begin() + i + 1, t1 + dt);
+      trajectory.insert(std::pair<double, geometry_msgs::Pose>(t1 + dt, add_pose));
+      i ++;
+
+//        btQuaternion q_add(addPose.orientation.x, addPose.orientation.y, addPose.orientation.z, addPose.orientation.w);
+//        btQuaternion q_rand;
+//        q_rand.setEuler((2*static_cast<double>(rand())/RAND_MAX - 1)*arc_rot,
+//                        (2*static_cast<double>(rand())/RAND_MAX - 1)*arc_rot,
+//                        (2*static_cast<double>(rand())/RAND_MAX - 1)*arc_rot);
+//        q_add = q_add*q_rand;
+//        addPose.orientation.w = q_add.w();
+//        addPose.orientation.x = q_add.x();
+//        addPose.orientation.y = q_add.y();
+//        addPose.orientation.z = q_add.z();
+    }
+  }
+}
+
+void HumanTrajectory::splineTrajectory(double step)
+{
+  long seed = std::chrono::system_clock::now().time_since_epoch().count();
+  std::mt19937 gen(seed);  // random seed
+
+  size_t last_key = keys.size() - 1;
+  bool no_move = false;
+
+  for (size_t i = 0; i < last_key; i ++)
+  {
+    if (comparePoses(trajectory[keys[i]], trajectory[keys[i + 1]]))
+    {
+      continue;
+    }
+    vector<double> time_pts;
+    vector<geometry_msgs::Pose> pos_pts;
+    time_pts.push_back(keys[i]);
+    pos_pts.push_back(trajectory[keys[i]]);
+    geometry_msgs::Point prev_pt = pos_pts[0].position;
+    for (size_t j = i + 1; j <= last_key; j ++)
+    {
+      if (trajectory[keys[j]].position.x == prev_pt.x && trajectory[keys[j]].position.y == prev_pt.y
+          && trajectory[keys[j]].position.z == prev_pt.z)
+      {
+        break;
+      }
+      time_pts.push_back(keys[j]);
+      pos_pts.push_back(trajectory[keys[j]]);
+      prev_pt = trajectory[keys[j]].position;
+    }
+
+    ecl::Array<double> time_points(pos_pts.size());
+    ecl::Array<double> x_points(pos_pts.size());
+    ecl::Array<double> y_points(pos_pts.size());
+    ecl::Array<double> z_points(pos_pts.size());
+    for (size_t j = 0; j < pos_pts.size(); j ++)
+    {
+      time_points[j] = time_pts[j];
+      x_points[j] = pos_pts[j].position.x;
+      y_points[j] = pos_pts[j].position.y;
+      z_points[j] = pos_pts[j].position.z;
+    }
+
+    // generate spline
+    ecl::CubicSpline x_spline, y_spline, z_spline;
+    x_spline = ecl::CubicSpline::Natural(time_points, x_points);
+    y_spline = ecl::CubicSpline::Natural(time_points, y_points);
+    z_spline = ecl::CubicSpline::Natural(time_points, z_points);
+
+    // add splined interpolated poses to the trajectory
+    for (size_t j = 0; j < pos_pts.size() - 1; j ++)
+    {
+      // setup all of the data we need (start and endpoints, steps, etc.)
+      double t1 = time_pts[j];
+      double t2 = time_pts[j + 1];
+      geometry_msgs::Pose p1 = pos_pts[j];
+      geometry_msgs::Pose p2 = pos_pts[j + 1];
+
+      double dt = t2 - t1;
+      int n = (int)(dt/step);
+
+      double dx = p2.position.x - p1.position.x;
+      double dy = p2.position.y - p1.position.y;
+      double dz = p2.position.z - p1.position.z;
+
+      btQuaternion q1(p1.orientation.x, p1.orientation.y, p1.orientation.z, p1.orientation.w);
+      btQuaternion q2(p2.orientation.x, p2.orientation.y, p2.orientation.z, p2.orientation.w);
+
+      // perform interpolation
+      geometry_msgs::Pose addPose;
+      for (int k = 1; k <= n; k ++)
+      {
+        double tk = t1 + k*step;
+        double percentage = k*step/dt;
+
+        // get splined position
+        addPose.position.x = x_spline(tk);
+        addPose.position.y = y_spline(tk);
+        addPose.position.z = z_spline(tk);
+
+        // interpolate (slerp) rotation
+        btQuaternion q_slerp = q1.slerp(q2, percentage);
+        addPose.orientation.w = q_slerp.w();
+        addPose.orientation.x = q_slerp.x();
+        addPose.orientation.y = q_slerp.y();
+        addPose.orientation.z = q_slerp.z();
+
+        keys.push_back(tk);
+        trajectory.insert(std::pair<double, geometry_msgs::Pose>(tk, addPose));
+      }
+    }
+  }
+
+  sortKeys();
 }
 
 void HumanTrajectory::randomizeTrajectory(double arc_trans, double arc_rot, double key_trans, double key_rot)

@@ -92,6 +92,15 @@ void TestExecutor::randomizeWeights()
   cout << "New weights: " << weights[0] << ", " << weights[1] << ", " << weights[2] << endl;
 }
 
+void TestExecutor::setWeights(std::vector<double> weights)
+{
+  this->weights.resize(weights.size());
+  for (size_t i = 0; i < weights.size(); i ++)
+  {
+    this->weights[i] = weights[i];
+  }
+}
+
 void TestExecutor::reset(double horizon)
 {
   if (approach == TestExecutor::SMDP)
@@ -157,48 +166,35 @@ bool TestExecutor::solve()
 {
   if (this->approach == SMDP)
   {
+    solver.setWeights(weights);
     solver.backwardsInduction();
     ROS_INFO("Policy computed.");
   }
   else if (this->approach == LP_SOLVE)
   {
     lp_solver.constructModel(weights);
-    ros::Time start_time = ros::Time::now();
-    lp_solver.setScaling(0, true);  // TODO: this is only here for scaling mode testing
-    if (lp_solver.solveModel(800))
+    // try some different parameters
+    bool lp_solved = false;
+    for (int attempt = 0; attempt < 4; attempt ++)
     {
-      ROS_INFO("LP solved.");
-      std::ofstream log_file;
-      log_file.open("solve_times.txt", std::ios::out | std::ios::app);
-      log_file << "\tSolve time: " << (ros::Time::now() - start_time).toSec() << "; scaling mode: " << 0 << endl;
-      log_file.close();
-      cout << "Solve time: " << (ros::Time::now() - start_time).toSec() << endl;
-    }
-    else
-    {
-      // try some different parameters
-      bool lp_solved = false;
-      for (int attempt = 1; attempt < 5; attempt ++)
-      {
-        lp_solver.setScaling(0, true);  // TODO: this is only here for scaling mode testing
+      lp_solver.setScaling(attempt);  // TODO: this is only here for scaling mode testing
 //        lp_solver.setScaling(attempt);
-        start_time = ros::Time::now();
-        lp_solved = lp_solver.solveModel(800);
-        if (lp_solved)
-        {
-          std::ofstream log_file;
-          log_file.open("solve_times.txt", std::ios::out | std::ios::app);
-          log_file << "\tSolve time: " << (ros::Time::now() - start_time).toSec() << "; scaling mode: " << attempt << endl;
-          log_file.close();
-          cout << "Solve time: " << (ros::Time::now() - start_time).toSec() << endl;
-          break;
-        }
-      }
-      if (!lp_solved)
+      ros::Time start_time = ros::Time::now();
+      lp_solved = lp_solver.solveModel(360);
+      if (lp_solved)
       {
-        ROS_INFO("Could not solve LP.");
-        return false;
+        std::ofstream log_file;
+        log_file.open("solve_times.txt", std::ios::out | std::ios::app);
+        log_file << "\tSolve time: " << (ros::Time::now() - start_time).toSec() << "; scaling mode: " << attempt << endl;
+        log_file.close();
+        cout << "Solve time: " << (ros::Time::now() - start_time).toSec() << endl;
+        break;
       }
+    }
+    if (!lp_solved)
+    {
+      ROS_INFO("Could not solve LP.");
+      return false;
     }
   }
   else if (this->approach == LP_LOAD)
@@ -210,7 +206,7 @@ bool TestExecutor::solve()
   return true;
 }
 
-bool TestExecutor::run(double sim_step, bool vis)
+int TestExecutor::run(double sim_step, bool vis)
 {
   if (current_time >= next_decision)
   {
@@ -260,6 +256,12 @@ bool TestExecutor::run(double sim_step, bool vis)
     else if (approach == LP_SOLVE || approach == LP_LOAD)
     {
       current_action = lp_solver.getAction(state, current_time);
+    }
+
+    // error case
+    if (current_action.actionType() == Action::NO_ACTION)
+    {
+      return -1;
     }
 
     geometry_msgs::Point goal;
@@ -394,7 +396,11 @@ bool TestExecutor::run(double sim_step, bool vis)
     optimal_robot_vis_publisher.publish(robot_marker);
   }
 
-  return current_time > time_horizon;
+  if (current_time > time_horizon)
+  {
+    return 1;
+  }
+  return 0;
 }
 
 void TestExecutor::reportResults()
@@ -461,23 +467,29 @@ void collectSolveTimes()
   }
 }
 
-void testSingleCase(int rate)
+void testSingleCase(int rate, bool tuning_mode)
 {
-  vector<double> weights{1, 40, 40};
-  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights);
-  TestExecutor te_eval(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, true);
+  // Scalarization
+  vector<double> weights{0.27, -0.34, -0.17, -0.22};
+  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
+  TestExecutor te_eval(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, true);
+
+//  // CMDP
+//  vector<double> weights{1, 20, 40};
+//  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights);
+//  TestExecutor te_eval(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, true);
 
   // set up containers for trajectory sampling
   vector<HumanTrajectory> trajectories;
   HumanTrajectory eval_trajectory;
-  size_t num_trajectory_samples = 10;
+  size_t num_trajectory_samples = 25;
 
   // set up list of tasks
   vector<string> trajectory_seeds = {"experiment_times.yaml", "inspection_times.yaml", "pick_place_times.yaml"};
   vector<double> horizons = {180, 180, 180};
 
   // set a new task
-  string trajectory_file = trajectory_seeds[floor(3.0 * static_cast<double>(rand()) / RAND_MAX)];
+  string trajectory_file = trajectory_seeds[1];
   te.reset(horizons[0]);
   te_eval.reset(horizons[0]);
 
@@ -501,20 +513,36 @@ void testSingleCase(int rate)
     ROS_INFO("Solve failed for multiple sampled trajectories");
     return;
   }
-  if (!te_eval.solve())
+  if (!tuning_mode)
   {
-    ROS_INFO("Solve failed for single sampled trajectory");
-    return;
+    if (!te_eval.solve())
+    {
+      ROS_INFO("Solve failed for single sampled trajectory");
+      return;
+    }
   }
+
+  ROS_INFO("Solving complete, provide input to start visualization...");
+  string str;
+  std::cin >> str;
 
   ros::Rate loop_rate(rate);
 
   while (ros::ok())
   {
     ros::spinOnce();
-    bool te_finished = te.run(0.0333333333333, true);
-    bool te_eval_finished = te_eval.run(0.0333333333333, true);
-    if (te_finished || te_eval_finished)
+    int te_eval_result = 0;
+    int te_result = te.run(0.0333333333333, true);
+    if (!tuning_mode)
+    {
+      te_eval_result = te_eval.run(0.0333333333333, true);
+    }
+    if (te_result == -1 || te_eval_result == -1)
+    {
+      ROS_INFO("An action selection error occurred.  Terminating run.");
+      break;
+    }
+    if (te_result == 1 || te_eval_result == 1)
     {
       break;
     }
@@ -524,21 +552,34 @@ void testSingleCase(int rate)
   ROS_INFO("Results solved over distribution: ");
   te.reportResults();
   cout << endl;
-  ROS_INFO("Best case results: ");
-  te_eval.reportResults();
+  if (!tuning_mode)
+  {
+    ROS_INFO("Best case results: ");
+    te_eval.reportResults();
+  }
 }
 
 void testFullSet(int runs_per_task, int num_trajectory_samples)
 {
   // Scalarization
-  vector<double> weights{1, -.333, -.333, -.333};
-  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
-  TestExecutor te_eval(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, true);
+  vector<double> weights1{0.27, -0.34, -0.17, -0.22};
+  vector<double> weights2{0.35, -0.43, -0.22, 0.0};
+  vector<double> weights3{0.33, -0.41, 0.0, -0.26};
+  vector<double> weights4{0.67, -0.33, 0.0, 0.0};
+  vector< vector<double> > weights_scal = {weights1, weights2, weights3, weights4};
+//  vector< vector<double> > weights_scal = {weights1, weights3};
+  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights_scal[0]);
+  TestExecutor te_eval(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights_scal[0], true);
 
-//  // CMDP
-//  vector<double> weights{1, 40, 40};
-//  TestExecutor te(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights);
-//  TestExecutor te_eval(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights, true);
+  // CMDP
+  vector<double> cweights1{1, 20, 40};
+  vector<double> cweights2{1, 20, 180};
+  vector<double> cweights3{1, 180, 40};
+  vector<double> cweights4{1, 180, 180};
+  vector< vector<double> > weights_cmdp = {cweights1, cweights2, cweights3, cweights4};
+//  vector< vector<double> > weights_cmdp = {cweights1, cweights3};
+  TestExecutor te_cmdp(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights_cmdp[0]);
+  TestExecutor te_cmdp_eval(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, weights_cmdp[0], true);
 
   // set up containers for trajectory sampling
   vector<HumanTrajectory> trajectories;
@@ -548,66 +589,136 @@ void testFullSet(int runs_per_task, int num_trajectory_samples)
   vector<string> trajectory_seeds = {"experiment_times.yaml", "inspection_times.yaml", "pick_place_times.yaml"};
   vector<double> horizons = {180, 180, 180};
 
-  for (size_t i = 0; i < trajectory_seeds.size(); i++)
+  for (size_t w = 0; w < weights_scal.size(); w ++)
   {
-    for (size_t j = 0; j < runs_per_task; j ++)
+    for (size_t i = 0; i < trajectory_seeds.size(); i ++)
     {
-      // set a new task
-      string trajectory_file = trajectory_seeds[i];
-      te.reset(horizons[0]);
-      te_eval.reset(horizons[0]);
-
-      // sample a new set of trajectories, and an evaluation trajectory
-      string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
-      trajectories.clear();
-      EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_trajectory_samples);
-      vector<HumanTrajectory> eval_samples;
-      EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1);
-      eval_trajectory = eval_samples[0];
-
-      // update solver with new trajectories
-      te.setTrajectories(trajectories);
-      te.setEvalTrajectory(eval_trajectory);
-      te_eval.setTrajectories(eval_samples);
-      te_eval.setEvalTrajectory(eval_trajectory);
-
-      // solve for policy
-      if (!te.solve())
-      {
-        ROS_INFO("Solve failed for multiple sampled trajectories");
+      if (i == 0)
         continue;
-      }
-      if (!te_eval.solve())
-      {
-        ROS_INFO("Solve failed for single sampled trajectory");
+      if (i == 1 && w != 1)
         continue;
-      }
-
-      ros::Rate loop_rate(100000000);
-
-      while (ros::ok())
-      {
-        ros::spinOnce();
-        bool te_finished = te.run(0.0333333333333, true);
-        bool te_eval_finished = te_eval.run(0.0333333333333, true);
-        if (te_finished || te_eval_finished)
-        {
-          break;
-        }
-        loop_rate.sleep();
-      }
-
-      ROS_INFO("Results solved over distribution: ");
-      te.reportResults();
-      cout << endl;
-      ROS_INFO("Best case results: ");
-      te_eval.reportResults();
-
+      if (i == 2 && w == 0)
+        continue;
       std::ofstream log_file;
-      log_file.open("solve_times-" + std::to_string(i) + ".txt", std::ios::out | std::ios::app);
-      log_file << te.r << ", " << te.c1 << ", " << te.c2 << ", " << te.c3 << ";" << te_eval.r << ", " << te_eval.c1
-        << ", " << te_eval.c2 << ", " << te_eval.c3 << endl;
+      log_file.open("results_scal-" + std::to_string(i) + ".txt", std::ios::out | std::ios::app);
+      log_file << "----- Weight Set " << std::to_string(w) << " -----" << endl;
       log_file.close();
+      log_file.open("results_cmdp-" + std::to_string(i) + ".txt", std::ios::out | std::ios::app);
+      log_file << "----- Weight Set " << std::to_string(w) << " -----" << endl;
+      log_file.close();
+      te.setWeights(weights_scal[w]);
+      te_eval.setWeights(weights_scal[w]);
+      te_cmdp.setWeights(weights_cmdp[w]);
+      te_cmdp_eval.setWeights(weights_cmdp[w]);
+    }
+    for (size_t i = 0; i < trajectory_seeds.size(); i ++)
+    {
+      if (i == 0)
+        continue;
+      if (i == 1 && w != 1)
+        continue;
+      if (i == 2 && w == 0)
+        continue;
+      for (size_t j = 0; j < runs_per_task; j++)
+      {
+        // set a new task
+        string trajectory_file = trajectory_seeds[i];
+        te.reset(horizons[0]);
+        te_eval.reset(horizons[0]);
+        te_cmdp.reset(horizons[0]);
+        te_cmdp_eval.reset(horizons[0]);
+
+        // sample a new set of trajectories, and an evaluation trajectory
+        string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
+        trajectories.clear();
+        EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_trajectory_samples);
+        vector<HumanTrajectory> eval_samples;
+        EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1);
+        eval_trajectory = eval_samples[0];
+
+        // update solver with new trajectories
+        te.setTrajectories(trajectories);
+        te.setEvalTrajectory(eval_trajectory);
+        te_eval.setTrajectories(eval_samples);
+        te_eval.setEvalTrajectory(eval_trajectory);
+        te_cmdp.setTrajectories(trajectories);
+        te_cmdp.setEvalTrajectory(eval_trajectory);
+        te_cmdp_eval.setTrajectories(eval_samples);
+        te_cmdp_eval.setEvalTrajectory(eval_trajectory);
+
+        // solve for policy
+        if (!te_cmdp.solve())
+        {
+          ROS_INFO("Solve failed for multiple sampled trajectories (CMDP)");
+          continue;
+        }
+        if (!te_cmdp_eval.solve())
+        {
+          ROS_INFO("Solve failed for single sampled trajectory (CMDP)");
+          continue;
+        }
+        if (!te.solve())
+        {
+          ROS_INFO("Solve failed for multiple sampled trajectories");
+          continue;
+        }
+        if (!te_eval.solve())
+        {
+          ROS_INFO("Solve failed for single sampled trajectory");
+          continue;
+        }
+
+        ros::Rate loop_rate(100000000);
+
+        bool action_selection_failure = false;
+        while (ros::ok())
+        {
+          ros::spinOnce();
+          int te_result = te.run(0.0333333333333, false);
+          int te_eval_result = te_eval.run(0.0333333333333, false);
+          int te_cmdp_result = te_cmdp.run(0.0333333333333, false);
+          int te_cmdp_eval_result = te_cmdp_eval.run(0.0333333333333, false);
+          if ((te_result == -1 || te_eval_result == -1) && (te_cmdp_result == -1 || te_cmdp_eval_result == -1))
+          {
+            ROS_INFO("An action selection error has occurred.  Terminating run.");
+            action_selection_failure = true;
+            break;
+          }
+          if ((te_result == 1 || te_eval_result == 1) && (te_cmdp_result == 1 || te_cmdp_eval_result == 1))
+          {
+            break;
+          }
+          loop_rate.sleep();
+        }
+
+        if (action_selection_failure)
+        {
+          continue;
+        }
+
+        ROS_INFO("Results solved over distribution (CMDP): ");
+        te_cmdp.reportResults();
+        cout << endl;
+        ROS_INFO("Best case results (CMDP): ");
+        te_cmdp_eval.reportResults();
+        ROS_INFO("Best case results: ");
+        te_eval.reportResults();
+        ROS_INFO("Results solved over distribution: ");
+        te.reportResults();
+        cout << endl;
+        ROS_INFO("Best case results: ");
+        te_eval.reportResults();
+
+        std::ofstream log_file;
+        log_file.open("results_scal-" + std::to_string(i) + ".txt", std::ios::out | std::ios::app);
+        log_file << te.r << ", " << te.c1 << ", " << te.c2 << ", " << te.c3 << "; " << te_eval.r << ", " << te_eval.c1
+                 << ", " << te_eval.c2 << ", " << te_eval.c3 << endl;
+        log_file.close();
+        log_file.open("results_cmdp-" + std::to_string(i) + ".txt", std::ios::out | std::ios::app);
+        log_file << te_cmdp.r << ", " << te_cmdp.c1 << ", " << te_cmdp.c2 << ", " << te_cmdp.c3 << "; "
+          << te_cmdp_eval.r << ", " << te_cmdp_eval.c1 << ", " << te_cmdp_eval.c2 << ", " << te_cmdp_eval.c3 << endl;
+        log_file.close();
+      }
     }
   }
 }
@@ -616,64 +727,12 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
 
-  // initialize a solver over a trajectory distribution, and a best-case evaluation solver (i.e. trajectory known)
-  // MOMDP linear scalarization test
-//  vector<double> weights{1, -.333, -.333, -.333};
-//  TestExecutor te(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights);
-//  TestExecutor te_eval(180, 1.0, TestExecutor::SMDP, SMDPFunctions::LINEARIZED_COST, weights, true);
-  // CMDP lp test
+//  collectSolveTimes();
 
-  collectSolveTimes();
+//  testSingleCase();
+//  testSingleCase(100, true);
 
-  //testSingleCase();
+  testFullSet(4, 25);
 
-//  //TODO: uncomment here for testing one run on all trajectories
-//  vector<double> results_r;
-//  vector<double> results_c1;
-//  vector<double> results_c2;
-//  vector<double> results_c3;
-//  results_r.resize(trajectory_files.size());
-//  results_c1.resize(trajectory_files.size());
-//  results_c2.resize(trajectory_files.size());
-//  results_c3.resize(trajectory_files.size());
-//
-//  for (unsigned int i = 0; i < trajectory_files.size(); i ++)
-//  {
-//    te.reset(horizons[i], trajectory_files[i]);
-//
-//    while (ros::ok())
-//    {
-//      ros::spinOnce();
-//      //    if (te.run(0.0333333333333))
-//      if (te.run(0.01))
-//      {
-//        break;
-//      }
-//      loop_rate.sleep();
-//    }
-//
-//    te.reportResults();
-//    results_r[i] += te.r;
-//    results_c1[i] += te.c1;
-//    results_c2[i] += te.c2;
-//    results_c3[i] += te.c3;
-//
-//    cout << "\n\n\nAll Results:" << endl;
-//    cout << "(r, c1, c2, c3)" << endl;
-//    for (size_t i = 0; i < results_r.size(); i ++)
-//    {
-//      cout << results_r[i] << "," << results_c1[i] << "," << results_c2[i] << "," << results_c3[i] << "," << endl;
-//    }
-//  }
-//
-//  cout << "\n\n\nFinal Results:" << endl;
-//  cout << "(r, c1, c2, c3)" << endl;
-//  for (size_t i = 0; i < results_r.size(); i ++)
-//  {
-//    cout << results_r[i] << "," << results_c1[i] << "," << results_c2[i] << "," << results_c3[i] << "," << endl;
-//  }
-//
-//  cout << "Finished all trials." << endl;
-//
-//  return EXIT_SUCCESS;
+  return EXIT_SUCCESS;
 }

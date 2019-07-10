@@ -18,6 +18,8 @@ public:
 
   void loadTrajectory(std::string file_name);
 
+  void setWeights(std::vector<double> weights);
+
   void setTrajectory(std::vector<HumanTrajectory> trajectories);
 
   void loadWaypoints(std::string file_name);

@@ -411,23 +411,15 @@ void LPSolver::setScaling(int scaling_type, bool random)
     }
     else if (scaling_type == 1)
     {
-      set_scaling(lp, SCALE_RANGE | SCALE_EQUILIBRATE);
+      set_scaling(lp, SCALE_GEOMETRIC | SCALE_LOGARITHMIC);
     }
     else if (scaling_type == 2)
     {
-      set_scaling(lp, SCALE_EXTREME | SCALE_POWER2);
+      set_scaling(lp, SCALE_RANGE | SCALE_LOGARITHMIC);
     }
     else if (scaling_type == 3)
     {
-      set_scaling(lp, SCALE_GEOMETRIC | SCALE_QUADRATIC);
-    }
-    else if (scaling_type == 4)
-    {
-      set_scaling(lp, SCALE_GEOMETRIC | SCALE_EQUILIBRATE);
-    }
-    else if (scaling_type == 5)
-    {
-      set_scaling(lp, SCALE_CURTISREID | SCALE_POWER2);
+      set_scaling(lp, SCALE_EXTREME | SCALE_EQUILIBRATE);
     }
   }
 }
@@ -616,6 +608,7 @@ Action LPSolver::getAction(PerchState s, size_t t)
   cout << "Getting action for time step " << t << ", waypoint " << waypointToIndex(s.waypoint)
        << " (perched: " << s.perched << ")..." << endl;
   size_t best_action_id = 0;
+  bool action_found = false;
   double max_value = 0;
   double sum = 0;
   vector<size_t> possible_actions;
@@ -630,6 +623,7 @@ Action LPSolver::getAction(PerchState s, size_t t)
         sum += test_value;
         possible_actions.push_back(i);
         ps.push_back(test_value);
+        action_found = true;
       }
       // Old code: deterministic action selection
 //      if (test_value > max_value)
@@ -638,6 +632,12 @@ Action LPSolver::getAction(PerchState s, size_t t)
 //        best_action_id = i;
 //      }
     }
+  }
+
+  // check if no action was found
+  if (!action_found)
+  {
+    return Action(Action::NO_ACTION);
   }
 
   // normalize probabilities

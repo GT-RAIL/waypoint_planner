@@ -11,6 +11,7 @@ find_package(Torch REQUIRED PATHS /usr/local/lib/python2.7/dist-packages/torch)
 find_package(catkin REQUIRED COMPONENTS
   actionlib
   cmake_modules
+  ecl_geometry
   geometry_msgs
   interactive_markers
   pcl_ros

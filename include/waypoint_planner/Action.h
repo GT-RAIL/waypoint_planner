@@ -11,6 +11,7 @@ public:
     static const uint8_t MOVE;
     static const uint8_t PERCH;
     static const uint8_t UNPERCH;
+    static const uint8_t NO_ACTION;
 
     Action(uint8_t action_type);
 

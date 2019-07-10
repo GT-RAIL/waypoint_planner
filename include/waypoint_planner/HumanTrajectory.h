@@ -1,7 +1,10 @@
 #ifndef WAYPOINT_PLANNER_HUMAN_TRAJECTORY_H_
 #define WAYPOINT_PLANNER_HUMAN_TRAJECTORY_H_
 
+#include <chrono>
+
 // ROS
+#include <ecl/geometry.hpp>
 #include <geometry_msgs/Pose.h>
 #include <tf2_bullet/tf2_bullet.h>
 #include <waypoint_planner/HumanTrajectoryMsg.h>
@@ -13,9 +16,13 @@ public:
 
     void addPose(double time, geometry_msgs::Pose pose);
 
+    void perturbTrajectory(double chance=0.1);
+
     void randomizeTrajectory(double arc_trans=0.8, double arc_rot=0.5, double key_trans=0.2, double key_rot=0.15);
 
     void interpolate(double step);
+
+    void splineTrajectory(double step);
 
     void sortKeys();
 

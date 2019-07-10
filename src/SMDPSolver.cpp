@@ -28,6 +28,11 @@ SMDPSolver::SMDPSolver(double horizon, double step, uint8_t mode, string waypoin
   default_human_dims.z = 1.4;
 }
 
+void SMDPSolver::setWeights(vector<double> weights)
+{
+  linearization_weights = weights;
+}
+
 void SMDPSolver::reset(double horizon)
 {
   time_horizon = horizon;
