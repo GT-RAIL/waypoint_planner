@@ -37,7 +37,7 @@ public:
 
     bool solve();
 
-    int run(double sim_step, bool vis=true);
+    int run(double sim_step, bool vis=true, bool log_policy=false, std::string log_name="log.txt");
 
     void reportResults();
 
@@ -95,6 +95,8 @@ private:
 void collectSolveTimes();
 
 void testSingleCase(int rate=100, bool tuning_mode=false);
+
+void logPolicyData();
 
 
 #endif  // WAYPOINT_PLANNER_TEST_EXECUTOR_H_

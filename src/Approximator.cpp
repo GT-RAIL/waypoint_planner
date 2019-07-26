@@ -41,7 +41,7 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
                           static_cast<float>(cost_constraints[2]),
                           static_cast<float>(robot_state.waypoint.x), static_cast<float>(robot_state.waypoint.y),
                           static_cast<float>(robot_state.waypoint.z),
-                           static_cast<float>(robot_state.perched)};
+                           static_cast<float>(robot_state.perched), static_cast<float>(cost_constraints[3])};
 
   // tensor order: [z][y][x] (depth, row, column)
 

@@ -32,59 +32,68 @@ void DataManager::testReadData()
   if (datafile.is_open())
   {
     int i = 0;  // TODO: loop through all csv entries
-    getline(datafile, line);
-    Action action(Action::OBSERVE);
-    vector<double> cost_constraints;
-    PerchState state;
-    vector<geometry_msgs::Pose> trajectory;
-    unpackLine(line, action, cost_constraints, state, trajectory);
+    while (getline(datafile, line))
+    {
+      if (line[0] == '-')
+      {
+        continue;
+      }
+      Action action(Action::OBSERVE);
+      vector<double> cost_constraints;
+      PerchState state;
+      vector<geometry_msgs::Pose> trajectory;
+      unpackLine(line, action, cost_constraints, state, trajectory);
+
+      Tensor pos_image = torch::zeros(IntArrayRef{static_cast<long>(Approximator::IMAGE_SIZE),
+                                                  static_cast<long>(Approximator::IMAGE_SIZE),
+                                                  static_cast<long>(Approximator::IMAGE_SIZE)});
+      Tensor rot_image = torch::zeros(IntArrayRef{static_cast<long>(Approximator::IMAGE_SIZE),
+                                                   static_cast<long>(Approximator::IMAGE_SIZE),
+                                                   static_cast<long>(Approximator::IMAGE_SIZE)});
+      approximator.createInput(cost_constraints, state, trajectory, pos_image, rot_image);
+
+      Tensor state_data = torch::zeros(IntArrayRef{8});
+      state_data[0] = static_cast<float>(cost_constraints[0]);
+      state_data[1] = static_cast<float>(cost_constraints[1]);
+      state_data[2] = static_cast<float>(cost_constraints[2]);
+      state_data[3] = state.waypoint.x;
+      state_data[4] = state.waypoint.y;
+      state_data[5] = state.waypoint.z;
+      state_data[6] = static_cast<float>(state.perched);
+      state_data[7] = static_cast<float>(cost_constraints[3]);
+
+      string output_csv_path =  ros::package::getPath("waypoint_planner") + "/data/" + data_filename + "-samples.csv";
+      string output_tensor_name = data_filename + "-" + std::to_string(i);
+      string pos_image_file = ros::package::getPath("waypoint_planner") + "/data/trajectories/" + output_tensor_name
+          + "-pos.pt";
+      string rot_image_file = ros::package::getPath("waypoint_planner") + "/data/trajectories/" + output_tensor_name
+          + "-rot.pt";
+      string state_data_file = ros::package::getPath("waypoint_planner") + "/data/trajectories/" + output_tensor_name
+                               + "-data.pt";
+
+      // write to processed csv file
+      std::ofstream sample_file;
+      sample_file.open(output_csv_path, std::ios::out | std::ios::app);
+      if (classifier_mode)
+      {
+        sample_file << std::to_string(approximator.actionToLabel(action)) << ",";
+      }
+      else
+      {
+        sample_file << std::to_string(action.actionType()) << "," << action.actionGoal().x << ","
+          << action.actionGoal().y << "," << action.actionGoal().z << ",";
+      }
+      sample_file << output_tensor_name << endl;
+      sample_file.close();
+
+      // output tensor data for pos and rot images
+      save(pos_image, pos_image_file);
+      save(rot_image, rot_image_file);
+      save(state_data, state_data_file);
+      i ++;
+    }
+
     datafile.close();
-
-    Tensor pos_image = torch::zeros(IntArrayRef{static_cast<long>(Approximator::IMAGE_SIZE),
-                                                static_cast<long>(Approximator::IMAGE_SIZE),
-                                                static_cast<long>(Approximator::IMAGE_SIZE)});
-    Tensor rot_image = torch::zeros(IntArrayRef{static_cast<long>(Approximator::IMAGE_SIZE),
-                                                 static_cast<long>(Approximator::IMAGE_SIZE),
-                                                 static_cast<long>(Approximator::IMAGE_SIZE)});
-    approximator.createInput(cost_constraints, state, trajectory, pos_image, rot_image);
-
-    Tensor state_data = torch::zeros(IntArrayRef{7});
-    state_data[0] = static_cast<float>(cost_constraints[0]);
-    state_data[1] = static_cast<float>(cost_constraints[1]);
-    state_data[2] = static_cast<float>(cost_constraints[2]);
-    state_data[3] = state.waypoint.x;
-    state_data[4] = state.waypoint.y;
-    state_data[5] = state.waypoint.z;
-    state_data[6] = static_cast<float>(state.perched);
-
-    string output_csv_path =  ros::package::getPath("waypoint_planner") + "/data/samples.csv";
-    string output_tensor_name = data_filename + "-" + std::to_string(i);
-    string pos_image_file = ros::package::getPath("waypoint_planner") + "/data/trajectories" + output_tensor_name
-        + "-pos.pt";
-    string rot_image_file = ros::package::getPath("waypoint_planner") + "/data/trajectories" + output_tensor_name
-        + "-rot.pt";
-    string state_data_file = ros::package::getPath("waypoint_planner") + "/data/trajectories" + output_tensor_name
-                             + "-data.pt";
-
-    // write to processed csv file
-    std::ofstream sample_file;
-    sample_file.open(output_csv_path, std::ios::out | std::ios::app);
-    if (classifier_mode)
-    {
-      sample_file << std::to_string(approximator.actionToLabel(action)) << ",";
-    }
-    else
-    {
-      sample_file << std::to_string(action.actionType()) << "," << action.actionGoal().x << ","
-        << action.actionGoal().y << "," << action.actionGoal().z << ",";
-    }
-    sample_file << output_tensor_name << endl;
-    sample_file.close();
-
-    // output tensor data for pos and rot images
-    save(pos_image, pos_image_file);
-    save(rot_image, rot_image_file);
-    save(state_data, state_data_file);
   }
 }
 
@@ -123,6 +132,10 @@ void DataManager::unpackLine(string line, Action &action, vector<double> &cost_c
   state.perched = atoi(line.substr(0, line.find(',')).c_str());
   line = line.substr(line.find(',') + 1);
 
+  // Time remaining (store at end of cost_constraints)
+  cost_constraints.push_back(atof(line.substr(0, line.find(',')).c_str()));
+  line = line.substr(line.find(',') + 1);
+
   while (line.find(',') != string::npos)
   {
     geometry_msgs::Pose pose;
@@ -143,13 +156,13 @@ void DataManager::unpackLine(string line, Action &action, vector<double> &cost_c
     trajectory.push_back(pose);
   }
 
-  cout << "Read line:" << endl;
-  cout << "\tAction: " << std::to_string(action.actionType()) << "(" << action.actionGoal().x << ", "
-      << action.actionGoal().y << ", " << action.actionGoal().z << ")" << endl;
-  cout << "\tCosts: " << cost_constraints[0] << ", " << cost_constraints[1] << ", " << cost_constraints[2] << endl;
-  cout << "\tRobot State: " << state.perched << " - (" << state.waypoint.x << ", " << state.waypoint.y << ", "
-      << state.waypoint.z << ")" << endl;
-  cout << "\tRemaining trajectory size: " << trajectory.size() << endl;
+//  cout << "Read line:" << endl;
+//  cout << "\tAction: " << std::to_string(action.actionType()) << "(" << action.actionGoal().x << ", "
+//      << action.actionGoal().y << ", " << action.actionGoal().z << ")" << endl;
+//  cout << "\tCosts: " << cost_constraints[0] << ", " << cost_constraints[1] << ", " << cost_constraints[2] << endl;
+//  cout << "\tRobot State: " << state.perched << " - (" << state.waypoint.x << ", " << state.waypoint.y << ", "
+//      << state.waypoint.z << ")" << endl;
+//  cout << "\tRemaining trajectory size: " << trajectory.size() << endl;
 }
 
 

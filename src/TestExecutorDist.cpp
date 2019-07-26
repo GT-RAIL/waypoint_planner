@@ -206,7 +206,7 @@ bool TestExecutor::solve()
   return true;
 }
 
-int TestExecutor::run(double sim_step, bool vis)
+int TestExecutor::run(double sim_step, bool vis, bool log_policy, string log_name)
 {
   if (current_time >= next_decision)
   {
@@ -258,10 +258,45 @@ int TestExecutor::run(double sim_step, bool vis)
       current_action = lp_solver.getAction(state, current_time);
     }
 
-    // error case
+//    ROS_INFO("1");
+
+    // error case, need to wait for next time step to get an action
     if (current_action.actionType() == Action::NO_ACTION)
     {
-      return -1;
+      // determine duration to next time step
+      double next_time = floor(current_time + 1.0);
+      double wait_duration = next_time - current_time;
+
+      // update rewards/costs for extra wait time
+      double r0 = RewardsAndCosts::reward_recognition(eval_trajectory.getPose(current_time),
+                                                      default_human_dims, state.waypoint)*wait_duration;
+      double c1_0 = RewardsAndCosts::cost_collision(eval_trajectory.getPose(current_time), default_human_dims,
+                                                    state.waypoint)*wait_duration;
+      double c2_0 = RewardsAndCosts::cost_intrusion(eval_trajectory.getPose(current_time), state.waypoint, state.perched)*wait_duration;
+      double c3_0 = RewardsAndCosts::cost_power(state.perched, current_action)*wait_duration;
+
+      // calculate rewards and costs and add them to the totals
+      r += r0;
+      c1 += c1_0;
+      c2 += c2_0;
+      c3 += c3_0;
+
+      // update current time and re-do action selection
+      current_time = next_time;
+      if (approach == SMDP)
+      {
+        current_action = solver.getAction(state, current_time);
+      }
+      else if (approach == LP_SOLVE || approach == LP_LOAD)
+      {
+        current_action = lp_solver.getAction(state, current_time);
+      }
+
+      // if there's still an error, return a failure
+      if (current_action.actionType() == Action::NO_ACTION)
+      {
+        return -1;
+      }
     }
 
     geometry_msgs::Point goal;
@@ -309,6 +344,7 @@ int TestExecutor::run(double sim_step, bool vis)
 //      ROS_INFO("Observing.");
       goal = state.waypoint;
     }
+
 
     // determine a (fake) execution time
     vector<double> durations;
@@ -362,6 +398,32 @@ int TestExecutor::run(double sim_step, bool vis)
       c2 += c2_0;
     }
     c3 += c3_0;  // this accumulates for every action
+
+//    ROS_INFO("Logging policy...");
+    if (log_policy)
+    {
+      // log data, in the form:
+      //  action type, goal x, goal y, goal z, c1 remaining, c2 remaining, c3 remaining, current x, current y, current z,
+      //  perched, time remaining, [remaining human trajectory: x, y, z, qx, qy, qz, qw, ...]
+      std::stringstream traj_stream;
+      for (double t_remaining = current_time; t_remaining < time_horizon; t_remaining += time_step)
+      {
+        geometry_msgs::Pose traj_remaining_pose = eval_trajectory.getPose(t_remaining);
+        traj_stream << traj_remaining_pose.position.x << "," << traj_remaining_pose.position.y << ","
+                    << traj_remaining_pose.position.z << "," << traj_remaining_pose.orientation.x << ","
+                    << traj_remaining_pose.orientation.y << "," << traj_remaining_pose.orientation.z << ","
+                    << traj_remaining_pose.orientation.w << ",";
+      }
+//      ROS_INFO("2");
+      std::ofstream log_file;
+      log_file.open(log_name, std::ios::out | std::ios::app);
+      log_file << std::to_string(current_action.actionType()) << "," << current_action.actionGoal().x << ","
+               << current_action.actionGoal().y << "," << current_action.actionGoal().z << "," << weights[0] - c1 << ","
+               << weights[1] - c2 << "," << weights[2] - c3 << "," << state.waypoint.x << "," << state.waypoint.y << ","
+               << state.waypoint.z << "," << state.perched << "," << time_horizon - current_time << ","
+               << traj_stream.str() << endl;
+      log_file.close();
+    }
 
 //    std::cout << "Time: " << current_time << "\tReward: " << r << ", C1: " << c1 << ", C2: " << c2 << ", C3: " << c3
 //      << std::endl;
@@ -723,6 +785,92 @@ void testFullSet(int runs_per_task, int num_trajectory_samples)
   }
 }
 
+void logPolicyData()
+{
+  // CMDP
+  vector<double> cweights{1, 20, 40};
+  TestExecutor te_cmdp(180, 1.0, TestExecutor::LP_SOLVE, SMDPFunctions::LINEARIZED_COST, cweights);
+
+  // set up containers for trajectory sampling
+  HumanTrajectory eval_trajectory;
+
+  // set up list of tasks
+  vector<string> trajectory_seeds = {"experiment_times", "inspection_times", "pick_place_times"};
+  vector<double> horizons = {180, 180, 180};
+
+  for (size_t run_counter = 0; run_counter < 150; run_counter ++)
+  {
+    for (size_t i = 0; i < trajectory_seeds.size(); i ++)
+    {
+      te_cmdp.randomizeWeights();
+
+      // set a new task
+      string trajectory_file = trajectory_seeds[i] + ".yaml";
+      te_cmdp.reset(horizons[0]);
+
+      // sample a new set of trajectories, and an evaluation trajectory
+      string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
+      vector<HumanTrajectory> eval_samples;
+      EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1, 0, false);
+      for (size_t i = 0; i < eval_samples.size(); i ++)
+      {
+        eval_samples[i].perturbTrajectory();
+        eval_samples[i].splineTrajectory(0.0333);
+      }
+      eval_trajectory = eval_samples[0];
+
+      // update solver with new trajectories
+      te_cmdp.setTrajectories(eval_samples);
+      te_cmdp.setEvalTrajectory(eval_trajectory);
+
+      // solve for policy
+      if (!te_cmdp.solve())
+      {
+        ROS_INFO("Solve failed for sampled trajectory (CMDP)");
+        continue;
+      }
+
+      ros::Rate loop_rate(100000000);
+
+      bool action_selection_failure = false;
+      while (ros::ok())
+      {
+        ros::spinOnce();
+        int te_cmdp_result = te_cmdp.run(0.0333333333333, false, true, trajectory_seeds[i] + ".txt");
+        if (te_cmdp_result == -1)
+        {
+          ROS_INFO("An action selection error has occurred.  Terminating run.");
+          action_selection_failure = true;
+          break;
+        }
+        if (te_cmdp_result == 1)
+        {
+          break;
+        }
+        loop_rate.sleep();
+      }
+
+      if (action_selection_failure)
+      {
+        std::ofstream log_file;
+        log_file.open(trajectory_seeds[i] + ".txt", std::ios::out | std::ios::app);
+        log_file << "---- Action Selection Failure ----" << endl;
+        log_file.close();
+        continue;
+      }
+
+      ROS_INFO("Results solved over sampled trajectory (CMDP): ");
+      te_cmdp.reportResults();
+      cout << endl;
+
+      std::ofstream log_file;
+      log_file.open(trajectory_seeds[i] + ".txt", std::ios::out | std::ios::app);
+      log_file << "----------------------------------" << endl;
+      log_file.close();
+    }
+  }
+}
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "test_executor");
@@ -732,7 +880,9 @@ int main(int argc, char **argv)
 //  testSingleCase();
 //  testSingleCase(100, true);
 
-  testFullSet(4, 25);
+//  testFullSet(4, 25);
+
+  logPolicyData();
 
   return EXIT_SUCCESS;
 }
