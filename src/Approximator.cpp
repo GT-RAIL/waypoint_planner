@@ -203,6 +203,152 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
   }
 }
 
+void Approximator::createInput(vector<double> cost_constraints, PerchState robot_state,
+    vector<geometry_msgs::Pose> trajectory, waypoint_planner::Tensor3D &pos_image,
+    waypoint_planner::Tensor3D &rot_image, bool vis)
+{
+  vector<float> inputs = {static_cast<float>(cost_constraints[0]), static_cast<float>(cost_constraints[1]),
+                          static_cast<float>(cost_constraints[2]),
+                          static_cast<float>(robot_state.waypoint.x), static_cast<float>(robot_state.waypoint.y),
+                          static_cast<float>(robot_state.waypoint.z),
+                          static_cast<float>(robot_state.perched), static_cast<float>(cost_constraints[3])};
+
+  // tensor order: [z][y][x] (depth, row, column)
+
+  long start_index = std::min(trajectory.size(), static_cast<size_t>(window)) - 1;
+
+  int prev_x = xIndex(trajectory[start_index].position.x);
+  int prev_y = yIndex(trajectory[start_index].position.y);
+  int prev_z = zIndex(trajectory[start_index].position.z);
+
+  tf2::Quaternion q_tf(trajectory[start_index].orientation.x, trajectory[start_index].orientation.y,
+                       trajectory[start_index].orientation.z, trajectory[start_index].orientation.w);
+  tf2::Matrix3x3 mat_tf(q_tf);
+  double roll_prev, pitch_prev, yaw_prev;
+  mat_tf.getRPY(roll_prev, pitch_prev, yaw_prev);
+  int prev_rol = rotIndex(roll_prev + M_PI);
+  int prev_pit = rotIndex(pitch_prev + M_PI);
+  int prev_yaw = rotIndex(yaw_prev + M_PI);
+
+  pos_image.data[prev_z].data[prev_y].data[prev_x] = static_cast<float>(window - start_index)/window;
+  rot_image.data[prev_yaw].data[prev_pit].data[prev_rol] = static_cast<float>(window - start_index)/window;
+
+  for (long i = start_index - 1; i >= 0; i --)
+  {
+    // update position image with current trajectory point
+    int cur_x = xIndex(trajectory[i].position.x);
+    int cur_y = yIndex(trajectory[i].position.y);
+    int cur_z = zIndex(trajectory[i].position.z);
+    if (prev_x == cur_x && prev_y == cur_y && prev_z == cur_z)
+    {
+      // simply overwrite the value to the earlier time intensity
+      pos_image.data[cur_z].data[cur_y].data[cur_x] = static_cast<float>(window - i)/window;
+    }
+    else
+    {
+      // interpolate between prev and cur points
+      vector< vector<int> > points = interpolatePoints(prev_x, cur_x, prev_y, cur_y, prev_z, cur_z);
+
+      for (size_t j = 0; j < points.size(); j ++)
+      {
+        pos_image.data[points[j][2]].data[points[j][1]].data[points[j][0]] = (static_cast<float>(window - (i + 1))
+            + static_cast<float>(j + 1)/points.size())/window;
+      }
+      prev_x = cur_x;
+      prev_y = cur_y;
+      prev_z = cur_z;
+    }
+
+    // update rotation image with current trajectory point
+    tf2::Quaternion q_tf_cur(trajectory[i].orientation.x, trajectory[i].orientation.y,
+                             trajectory[i].orientation.z, trajectory[i].orientation.w);
+    tf2::Matrix3x3 mat_tf_cur(q_tf_cur);
+    double roll_cur, pitch_cur, yaw_cur;
+    mat_tf_cur.getRPY(roll_cur, pitch_cur, yaw_cur);
+    int cur_rol = rotIndex(roll_cur + M_PI);
+    int cur_pit = rotIndex(pitch_cur + M_PI);
+    int cur_yaw = rotIndex(yaw_cur + M_PI);
+    if ((prev_rol == cur_rol && prev_pit == cur_pit && prev_yaw == cur_yaw) || fabs(roll_cur - roll_prev) > M_PI
+        || fabs(pitch_cur - pitch_prev) > M_PI || fabs(yaw_cur - yaw_prev) > M_PI)
+    {
+      // simply overwrite the value to the earlier time intensity
+      rot_image.data[cur_yaw].data[cur_pit].data[cur_rol] = static_cast<float>(window - i)/window;
+    }
+    else
+    {
+      // interpolate between prev and cur points
+      vector< vector<int> > points = interpolatePoints(prev_rol, cur_rol, prev_pit, cur_pit, prev_yaw, cur_yaw);
+
+      for (size_t j = 0; j < points.size(); j ++)
+      {
+        rot_image.data[points[j][2]].data[points[j][1]].data[points[j][0]] = (static_cast<float>(window - (i + 1))
+            + static_cast<float>(j + 1)/points.size())/window;
+      }
+    }
+    prev_rol = cur_rol;
+    prev_pit = cur_pit;
+    prev_yaw = cur_yaw;
+    roll_prev = roll_cur;
+    pitch_prev = pitch_cur;
+    yaw_prev = yaw_cur;
+  }
+
+  if (vis)
+  {
+    ROS_INFO("Constructed position and rotation 3D trajectory image tensors.");
+    ROS_INFO("Converting them to point clouds for visualization...");
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr vis_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    vis_cloud->header.frame_id = "world";
+    int n = 0;
+    for (size_t k = 0; k < pos_image.data.size(); k++)
+    {
+      for (size_t j = 0; j < pos_image.data[k].data.size(); j++)
+      {
+        for (size_t i = 0; i < pos_image.data[k].data[j].data.size(); i++)
+        {
+          if (pos_image.data[k].data[j].data[i] > 0)
+          {
+            n++;
+            pcl::PointXYZRGB p;
+            p.x = static_cast<float>(i) / IMAGE_SIZE;
+            p.y = static_cast<float>(j) / IMAGE_SIZE;
+            p.z = static_cast<float>(k) / IMAGE_SIZE;
+            p.r = static_cast<uint8_t>(pos_image.data[k].data[j].data[i] * 255);
+            p.g = static_cast<uint8_t>(pos_image.data[k].data[j].data[i] * 255);
+            p.b = static_cast<uint8_t>(pos_image.data[k].data[j].data[i] * 255);
+            p.a = 255;
+            vis_cloud->points.push_back(p);
+          }
+        }
+      }
+    }
+
+    for (size_t k = 0; k < rot_image.data.size(); k++)
+    {
+      for (size_t j = 0; j < rot_image.data[k].data.size(); j++)
+      {
+        for (size_t i = 0; i < rot_image.data[k].data[j].data.size(); i++)
+        {
+          if (rot_image.data[k].data[j].data[i] > 0)
+          {
+            pcl::PointXYZRGB p;
+            p.x = static_cast<float>(i) / IMAGE_SIZE + 1.2;
+            p.y = static_cast<float>(j) / IMAGE_SIZE;
+            p.z = static_cast<float>(k) / IMAGE_SIZE;
+            p.r = static_cast<uint8_t>(rot_image.data[k].data[j].data[i] * 255);
+            p.g = static_cast<uint8_t>(rot_image.data[k].data[j].data[i] * 255);
+            p.b = static_cast<uint8_t>(rot_image.data[k].data[j].data[i] * 255);
+            p.a = 255;
+            vis_cloud->points.push_back(p);
+          }
+        }
+      }
+    }
+    img_cloud_pub.publish(vis_cloud);
+    ROS_INFO("Visualization complete and published to rviz.");
+  }
+}
+
 int Approximator::xIndex(double x)
 {
   return lround((x - min_x)/x_range*(IMAGE_SIZE - 1));

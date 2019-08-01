@@ -16,6 +16,7 @@
 #include "waypoint_planner/Action.h"
 #include "waypoint_planner/EnvironmentSetup.h"
 #include "waypoint_planner/PerchState.h"
+#include "waypoint_planner/Tensor3D.h"
 
 class Approximator
 {
@@ -28,6 +29,10 @@ public:
   void createInput(std::vector<double> cost_constraints, PerchState robot_state,
       std::vector<geometry_msgs::Pose> trajectory, torch::Tensor &pos_image, torch::Tensor &rot_image,
       bool vis=false);
+
+    void createInput(std::vector<double> cost_constraints, PerchState robot_state,
+        std::vector<geometry_msgs::Pose> trajectory, waypoint_planner::Tensor3D &pos_image, waypoint_planner::Tensor3D
+        &rot_image, bool vis=false);
 
   void readWaypoints(std::string file_path);
 

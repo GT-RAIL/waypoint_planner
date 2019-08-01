@@ -12,6 +12,8 @@
 #include "waypoint_planner/Action.h"
 #include "waypoint_planner/Approximator.h"
 #include "waypoint_planner/PerchState.h"
+#include "waypoint_planner/SaveTensor1D.h"
+#include "waypoint_planner/SaveTensor3D.h"
 
 class DataManager
 {
@@ -25,6 +27,10 @@ public:
 
 private:
   ros::NodeHandle pnh;
+  ros::NodeHandle n;
+
+  ros::ServiceClient save_1D_tensor;
+  ros::ServiceClient save_3D_tensor;
 
   std::string file_path;
   std::string data_filename;

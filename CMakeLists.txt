@@ -3,7 +3,7 @@ project(waypoint_planner)
 
 add_compile_options(-std=c++11)
 
-#find_package(Torch REQUIRED PATHS /home/dekent/torch/libtorch)
+# find_package(Torch REQUIRED PATHS /home/dekent/torch_back/libtorch)
 find_package(Torch REQUIRED PATHS /usr/local/lib/python2.7/dist-packages/torch)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -43,11 +43,16 @@ endif()
 add_message_files(
   FILES
   HumanTrajectoryMsg.msg
+  Tensor1D.msg
+  Tensor2D.msg
+  Tensor3D.msg
 )
 
 add_service_files(
   FILES
   ChangeTime.srv
+  SaveTensor1D.srv
+  SaveTensor3D.srv
 )
 
 generate_messages(
@@ -213,6 +218,25 @@ add_dependencies(
         data_manager
         ${PROJECT_NAME}_generate_messages_cpp
 )
+
+#add_executable(policy_data_loader
+#        src/PolicyDataLoader.cpp
+#        src/Action.cpp
+#        src/Approximator.cpp
+#        src/EnvironmentSetup.cpp
+#        src/HumanTrajectory.cpp
+#        src/PerchState.cpp
+#        )
+#target_link_libraries(policy_data_loader
+#        ${catkin_LIBRARIES}
+#        ${TORCH_LIBRARIES}
+#        yaml-cpp
+#        )
+#add_dependencies(
+#        policy_data_loader
+#        ${PROJECT_NAME}_generate_messages_cpp
+#)
+#set_property(TARGET policy_data_loader PROPERTY CXX_STANDARD 11)
 
 #add_executable(example-app src/Approximator.cpp)
 #target_link_libraries(example-app ${TORCH_LIBRARIES} ${catkin_LIBRARIES})
