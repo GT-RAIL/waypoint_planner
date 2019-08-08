@@ -71,11 +71,11 @@ class Conv3DPolicy(nn.Module):
 
         return x
 
-model = Conv3DPolicy(4)
-batch_size = 1
-voxel_map = torch.randn(batch_size, 2, 32, 32, 32)
-data_vector = torch.randn(batch_size, 8)
-
-output = model(voxel_map, data_vector)
-print('output size: ', output.size())
-print(output)
+# model = Conv3DPolicy(4)
+# batch_size = 4
+# voxel_map = torch.randn(batch_size, 2, 32, 32, 32)
+# data_vector = torch.randn(batch_size, 8)
+#
+# output = model(voxel_map, data_vector)
+# print('output size: ', output.size())
+# print(output)

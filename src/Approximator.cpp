@@ -9,7 +9,7 @@ using std::string;
 using std::vector;
 using namespace torch;
 
-const size_t Approximator::IMAGE_SIZE = 64;
+const size_t Approximator::IMAGE_SIZE = 32;
 
 Approximator::Approximator(int window, double min_x, double max_x, double min_y, double max_y, double min_z,
     double max_z) : pn("~")
@@ -230,7 +230,11 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
   int prev_pit = rotIndex(pitch_prev + M_PI);
   int prev_yaw = rotIndex(yaw_prev + M_PI);
 
+//  cout << std::to_string(window) << endl;
+//  cout << std::to_string(start_index) << endl;
+//  cout << std::to_string(prev_z) << ", " << std::to_string(prev_y) << ", " << std::to_string(prev_x) << endl;
   pos_image.data[prev_z].data[prev_y].data[prev_x] = static_cast<float>(window - start_index)/window;
+//  cout << std::to_string(prev_yaw) << ", " << std::to_string(prev_pit) << ", " << std::to_string(prev_rol) << endl;
   rot_image.data[prev_yaw].data[prev_pit].data[prev_rol] = static_cast<float>(window - start_index)/window;
 
   for (long i = start_index - 1; i >= 0; i --)

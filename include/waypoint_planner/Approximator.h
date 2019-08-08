@@ -23,8 +23,8 @@ class Approximator
 public:
     static const size_t IMAGE_SIZE;
 
-  Approximator(int window=90, double min_x=9, double max_x=12.5, double min_y=-12, double max_y=-2, double min_z=3,
-      double max_z=7);
+  Approximator(int window=90, double min_x=9, double max_x=12.5, double min_y=-12, double max_y=-2, double min_z=2,
+      double max_z=8);
 
   void createInput(std::vector<double> cost_constraints, PerchState robot_state,
       std::vector<geometry_msgs::Pose> trajectory, torch::Tensor &pos_image, torch::Tensor &rot_image,

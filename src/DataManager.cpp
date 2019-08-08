@@ -13,10 +13,11 @@ DataManager::DataManager() :
   // get data file
   string waypoint_filename;
   pnh.param<string>("data_file", data_filename, "log_experiment");
+  pnh.param<string>("dir", subfolder, "training");
   pnh.param<string>("waypoint_file", waypoint_filename, "iss_waypoints.csv");
   pnh.param<bool>("classifier_mode", classifier_mode, true);
-  std::cout << "Ready to read from data/" << data_filename << ".csv" << std::endl;
-  file_path = ros::package::getPath("waypoint_planner") + "/data/" + data_filename + ".csv";
+  std::cout << "Ready to read from data/" << subfolder << data_filename << ".csv" << std::endl;
+  file_path = ros::package::getPath("waypoint_planner") + "/data/" + subfolder + "/" + data_filename + ".csv";
 
   save_1D_tensor = n.serviceClient<waypoint_planner::SaveTensor1D>("tensor_saver/save_1D_tensor");
   save_3D_tensor = n.serviceClient<waypoint_planner::SaveTensor3D>("tensor_saver/save_3D_tensor");
@@ -37,12 +38,13 @@ void DataManager::testReadData()
     int csv_line = 0;  // TODO: loop through all csv entries
     while (getline(datafile, line))
     {
-      if (csv_line % 25 == 0)
+      if (csv_line % 1 == 0)
       {
         cout << "At csv line " << std::to_string(csv_line) << "." << endl;
       }
       if (line[0] == '-')
       {
+        csv_line ++;
         continue;
       }
       Action action(Action::OBSERVE);
@@ -136,14 +138,15 @@ void DataManager::testReadData()
       data_srv.request.tensor.data[6] = static_cast<float>(state.perched);
       data_srv.request.tensor.data[7] = static_cast<float>(cost_constraints[3]);
 
-      string output_csv_path =  ros::package::getPath("waypoint_planner") + "/data/" + data_filename + "-samples.csv";
+      string output_csv_path =  ros::package::getPath("waypoint_planner") + "/data/" + subfolder + "/" + data_filename
+        + "-samples.csv";
       string output_tensor_name = data_filename + "-" + std::to_string(csv_line);
-      string pos_image_file = ros::package::getPath("waypoint_planner") + "/data/trajectories/" + output_tensor_name
-          + "-pos.pt";
-      string rot_image_file = ros::package::getPath("waypoint_planner") + "/data/trajectories/" + output_tensor_name
-          + "-rot.pt";
-      string state_data_file = ros::package::getPath("waypoint_planner") + "/data/trajectories/" + output_tensor_name
-                               + "-data.pt";
+      string pos_image_file = ros::package::getPath("waypoint_planner") + "/data/" + subfolder + "/trajectories/"
+        + output_tensor_name + "-pos.pt";
+      string rot_image_file = ros::package::getPath("waypoint_planner") + "/data/" + subfolder + "/trajectories/"
+        + output_tensor_name + "-rot.pt";
+      string state_data_file = ros::package::getPath("waypoint_planner") + "/data/" + subfolder + "/trajectories/"
+        + output_tensor_name + "-data.pt";
 
       pos_srv.request.filename = pos_image_file;
       rot_srv.request.filename = rot_image_file;

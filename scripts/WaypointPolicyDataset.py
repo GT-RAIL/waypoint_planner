@@ -23,8 +23,10 @@ class WaypointPolicyDataset(Dataset):
         file_base = self.csv.iloc[idx, 1]
         pos_img_tensor = torch.load(os.path.join(self.root_dir, file_base + '-pos.pt'))
         rot_img_tensor = torch.load(os.path.join(self.root_dir, file_base + '-rot.pt'))
-        data_img_tensor = torch.load(os.path.join(self.root_dir, file_base + '-data.pt'))
+        data_tensor = torch.load(os.path.join(self.root_dir, file_base + '-data.pt'))
 
-        sample = {'pos_img': pos_img_tensor, 'rot_img': rot_img_tensor, 'data': data_img_tensor}
+        voxel_map = torch.cat([pos_img_tensor[None, :, :, :], rot_img_tensor[None, :, :, :]], dim=0)
+
+        sample = {'voxel_map': voxel_map, 'data_vector': data_tensor}
 
         return (sample, label)

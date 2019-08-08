@@ -34,6 +34,7 @@ private:
 
   std::string file_path;
   std::string data_filename;
+  std::string subfolder;
   bool classifier_mode;
 
   Approximator approximator;

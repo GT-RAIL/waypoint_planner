@@ -23,7 +23,7 @@ dataloader = DataLoader(policy_dataset, batch_size=4, shuffle=True)
 i = 0
 for samples, labels in dataloader:
     print('------ New Batch ------')
-    print(samples['pos_img'].size(), samples['rot_img'].size(), samples['data'].size(), 'labels:', labels)
+    print(samples['voxel_map'].size(), samples['data_vector'].size(), 'labels:', labels)
     if i == 2:
         break
     i += 1
