@@ -96,7 +96,7 @@ void collectSolveTimes();
 
 void testSingleCase(int rate=100, bool tuning_mode=false);
 
-void logPolicyData();
+void logPolicyData(bool random_traj=false);
 
 
 #endif  // WAYPOINT_PLANNER_TEST_EXECUTOR_H_

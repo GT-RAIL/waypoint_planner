@@ -16,6 +16,9 @@ public:
 
     void addPose(double time, geometry_msgs::Pose pose);
 
+    void sampleRandomTrajectory(double end_time, double wait_chance=0.25, double min_x=9, double max_x=12.5,
+        double min_y=-12, double max_y=-2, double min_z=2, double max_z=8);
+
     void perturbTrajectory(double chance=0.1);
 
     void randomizeTrajectory(double arc_trans=0.8, double arc_rot=0.5, double key_trans=0.2, double key_rot=0.15);

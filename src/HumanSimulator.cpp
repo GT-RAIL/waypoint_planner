@@ -13,11 +13,17 @@ HumanSimulator::HumanSimulator() :
   pnh.param<int>("num_samples", num_samples, 1);
   std::cout << "Creating trajectories from " << trajectory_filename << std::endl;
   string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_filename;
-  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_samples, 0, false);
+//  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_samples, 0, false);
 //  EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, trajectories, num_samples);
+  trajectories.resize(num_samples);
+//  for (size_t i = 0; i < trajectories.size(); i ++)
+//  {
+//    trajectories[i].perturbTrajectory();
+//    trajectories[i].splineTrajectory(0.0333);
+//  }
   for (size_t i = 0; i < trajectories.size(); i ++)
   {
-    trajectories[i].perturbTrajectory();
+    trajectories[i].sampleRandomTrajectory(180);
     trajectories[i].splineTrajectory(0.0333);
   }
 

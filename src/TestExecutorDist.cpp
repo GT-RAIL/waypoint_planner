@@ -86,8 +86,8 @@ TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_
 void TestExecutor::randomizeWeights()
 {
   weights[0] = 4*static_cast<double>(rand())/RAND_MAX + 1;
-  weights[1] = 50*static_cast<double>(rand())/RAND_MAX + 10;
-  weights[2] = 50*static_cast<double>(rand())/RAND_MAX + 20;
+  weights[1] = 80*static_cast<double>(rand())/RAND_MAX + 10;
+  weights[2] = 80*static_cast<double>(rand())/RAND_MAX + 20;
 
   cout << "New weights: " << weights[0] << ", " << weights[1] << ", " << weights[2] << endl;
 }
@@ -785,7 +785,7 @@ void testFullSet(int runs_per_task, int num_trajectory_samples)
   }
 }
 
-void logPolicyData()
+void logPolicyData(bool random_traj)
 {
   // CMDP
   vector<double> cweights{1, 20, 40};
@@ -798,7 +798,7 @@ void logPolicyData()
   vector<string> trajectory_seeds = {"experiment_times", "inspection_times", "pick_place_times"};
   vector<double> horizons = {180, 180, 180};
 
-  for (size_t run_counter = 0; run_counter < 150; run_counter ++)
+  for (size_t run_counter = 0; run_counter < 1500; run_counter ++)
   {
     for (size_t i = 0; i < trajectory_seeds.size(); i ++)
     {
@@ -811,11 +811,23 @@ void logPolicyData()
       // sample a new set of trajectories, and an evaluation trajectory
       string trajectory_file_path = ros::package::getPath("waypoint_planner") + "/config/" + trajectory_file;
       vector<HumanTrajectory> eval_samples;
-      EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1, 0, false);
-      for (size_t i = 0; i < eval_samples.size(); i ++)
+      if (random_traj)
       {
-        eval_samples[i].perturbTrajectory();
-        eval_samples[i].splineTrajectory(0.0333);
+        eval_samples.resize(1);
+        for (size_t i = 0; i < eval_samples.size(); i ++)
+        {
+          eval_samples[i].sampleRandomTrajectory(180);
+          eval_samples[i].splineTrajectory(0.0333);
+        }
+      }
+      else
+      {
+        EnvironmentSetup::sampleHumanTrajectories(trajectory_file_path, eval_samples, 1, 0, false);
+        for (size_t i = 0; i < eval_samples.size(); i ++)
+        {
+          eval_samples[i].perturbTrajectory();
+          eval_samples[i].splineTrajectory(0.0333);
+        }
       }
       eval_trajectory = eval_samples[0];
 
@@ -836,7 +848,15 @@ void logPolicyData()
       while (ros::ok())
       {
         ros::spinOnce();
-        int te_cmdp_result = te_cmdp.run(0.0333333333333, false, true, trajectory_seeds[i] + ".txt");
+        int te_cmdp_result;
+        if (random_traj)
+        {
+          te_cmdp_result = te_cmdp.run(0.0333333333333, false, true,"log_random.csv");
+        }
+        else
+        {
+          te_cmdp_result = te_cmdp.run(0.0333333333333, false, true, trajectory_seeds[i] + ".txt");
+        }
         if (te_cmdp_result == -1)
         {
           ROS_INFO("An action selection error has occurred.  Terminating run.");
@@ -853,7 +873,14 @@ void logPolicyData()
       if (action_selection_failure)
       {
         std::ofstream log_file;
-        log_file.open(trajectory_seeds[i] + ".txt", std::ios::out | std::ios::app);
+        if (random_traj)
+        {
+          log_file.open("log_random.csv", std::ios::out | std::ios::app);
+        }
+        else
+        {
+          log_file.open(trajectory_seeds[i] + ".txt", std::ios::out | std::ios::app);
+        }
         log_file << "---- Action Selection Failure ----" << endl;
         log_file.close();
         continue;
@@ -864,7 +891,14 @@ void logPolicyData()
       cout << endl;
 
       std::ofstream log_file;
-      log_file.open(trajectory_seeds[i] + ".txt", std::ios::out | std::ios::app);
+      if (random_traj)
+      {
+        log_file.open("log_random.csv", std::ios::out | std::ios::app);
+      }
+      else
+      {
+        log_file.open(trajectory_seeds[i] + ".txt", std::ios::out | std::ios::app);
+      }
       log_file << "----------------------------------" << endl;
       log_file.close();
     }
@@ -882,7 +916,7 @@ int main(int argc, char **argv)
 
 //  testFullSet(4, 25);
 
-  logPolicyData();
+  logPolicyData(true);
 
   return EXIT_SUCCESS;
 }

@@ -18,6 +18,124 @@ void HumanTrajectory::sortKeys()
   std::sort(keys.begin(), keys.end());
 }
 
+void HumanTrajectory::sampleRandomTrajectory(double end_time, double wait_chance, double min_x, double max_x,
+    double min_y, double max_y, double min_z, double max_z)
+{
+  long seed = std::chrono::system_clock::now().time_since_epoch().count();
+  std::mt19937 gen(seed);  // random seed
+
+  std::uniform_real_distribution<double> x_dst(min_x, max_x);
+  std::uniform_real_distribution<double> y_dst(min_y, max_y);
+  std::uniform_real_distribution<double> z_dst(min_z, max_z);
+  std::uniform_real_distribution<double> o_dst(0, 2*M_PI);
+  std::uniform_real_distribution<double> t_dst(1, 20);
+  std::uniform_real_distribution<double> dt_dst(0, 5);
+  std::uniform_real_distribution<double> stop_dst(0, 1);
+
+  double t = 0;
+
+  // sample starting pose
+  geometry_msgs::Pose cur_pose;
+  cur_pose.position.x = x_dst(gen);
+  cur_pose.position.y = y_dst(gen);
+  cur_pose.position.z = z_dst(gen);
+
+  double cur_rol = o_dst(gen);
+  double cur_pit = o_dst(gen);
+  double cur_yaw = o_dst(gen);
+
+  btQuaternion q;
+  q.setEuler(cur_yaw, cur_pit, cur_rol);
+  cur_pose.orientation.w = q.w();
+  cur_pose.orientation.x = q.x();
+  cur_pose.orientation.y = q.y();
+  cur_pose.orientation.z = q.z();
+
+  addPose(t, cur_pose);
+
+  while (t < end_time)
+  {
+    geometry_msgs::Pose new_pose;
+    double dt = t_dst(gen);
+    if (t + dt > end_time)
+    {
+      dt = end_time - t;
+    }
+
+    if (stop_dst(gen) <= wait_chance || dt < 1)
+    {
+      t += dt;
+      addPose(t, cur_pose);
+      continue;
+    }
+
+    double dst = std::numeric_limits<double>::infinity();
+    while (dst > pow(dt*1.0, 2))  // limit to 1.5 m/s
+    {
+      new_pose.position.x = x_dst(gen);
+      new_pose.position.y = y_dst(gen);
+      new_pose.position.z = z_dst(gen);
+      dst = pow(new_pose.position.x - cur_pose.position.x, 2) + pow(new_pose.position.y - cur_pose.position.y, 2)
+          + pow(new_pose.position.z - cur_pose.position.z, 2);
+    }
+
+    double max_turn = std::min(M_PI/4.0*dt, 2*M_PI);
+    std::uniform_real_distribution<double> ori_dst(0, max_turn);
+
+    double new_rol = cur_rol + ori_dst(gen);
+    double new_pit = cur_pit + ori_dst(gen);
+    double new_yaw = cur_yaw + ori_dst(gen);
+
+    while (new_rol > 2*M_PI)
+    {
+      new_rol -= 2*M_PI;
+    }
+    while (new_rol < -2*M_PI)
+    {
+      new_rol += 2*M_PI;
+    }
+    while (new_pit > 2*M_PI)
+    {
+      new_pit -= 2*M_PI;
+    }
+    while (new_pit < -2*M_PI)
+    {
+      new_pit += 2*M_PI;
+    }
+    while (new_yaw > 2*M_PI)
+    {
+      new_yaw -= 2*M_PI;
+    }
+    while (new_yaw < -2*M_PI)
+    {
+      new_yaw += 2*M_PI;
+    }
+
+    btQuaternion new_q;
+    new_q.setEuler(new_yaw, new_pit, new_yaw);
+    new_pose.orientation.w = new_q.w();
+    new_pose.orientation.x = new_q.x();
+    new_pose.orientation.y = new_q.y();
+    new_pose.orientation.z = new_q.z();
+
+    // chance to add extra time, because it's more likely to sample far away points (move fast) than close points
+    dt += dt_dst(gen);
+    if (t + dt > end_time)
+    {
+      dt = end_time - t;
+    }
+
+    t += dt;
+    addPose(t, new_pose);
+
+    cur_pose.position = new_pose.position;
+    cur_pose.orientation = new_pose.orientation;
+    cur_rol = new_rol;
+    cur_pit = new_pit;
+    cur_yaw = new_yaw;
+  }
+}
+
 //TODO: add intermediate points first, spline and interpolate in a separate function
 void HumanTrajectory::perturbTrajectory(double chance)
 {
