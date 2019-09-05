@@ -5,62 +5,58 @@ from __future__ import print_function
 import torch
 import torch.nn as nn
 
-class Conv3DPolicy(nn.Module):
+class Conv3DPolicyBinary(nn.Module):
 
-    def __init__(self, num_classes):
-        super(Conv3DPolicy, self).__init__()
+    def __init__(self):
+        super(Conv3DPolicyBinary, self).__init__()
 
         # 3D CNN for position/rotation voxel map
         self.image_conv1 = nn.Sequential(
             nn.Conv3d(2, 32, kernel_size=5, stride=2),
             nn.LeakyReLU(0.1)  # defaults to .01, using parameter reported from VoxNet
         )
-        torch.nn.init.xavier_uniform(self.image_conv1.weight, torch.nn.init.calculate_gain('leaky_relu', .1))
 
         self.image_conv2 = nn.Sequential(
             nn.Conv3d(32, 32, kernel_size=3),
             nn.LeakyReLU(0.1),
             nn.MaxPool3d(2)
         )
-        torch.nn.init.xavier_uniform(self.image_conv2.weight, torch.nn.init.calculate_gain('leaky_relu', .1))
 
         self.image_fc1 = nn.Sequential(
             nn.Linear(32*6*6*6, 128),
             nn.LeakyReLU(0.1)
         )
-        torch.nn.init.xavier_uniform(self.image_fc1.weight, torch.nn.init.calculate_gain('leaky_relu', .1))
 
         # Fully-connected network for data vector
         self.data_fc1 = nn.Sequential(
             nn.Linear(8, 64),
             nn.LeakyReLU(0.1)
         )
-        torch.nn.init.xavier_uniform(self.data_fc1.weight, torch.nn.init.calculate_gain('leaky_relu', .1))
 
         self.data_fc2 = nn.Sequential(
             nn.Linear(64, 128),
             nn.LeakyReLU(0.1)
         )
-        torch.nn.init.xavier_uniform(self.data_fc2.weight, torch.nn.init.calculate_gain('leaky_relu', .1))
 
         # Late fusion and classification
         self.fusion_fc1 = nn.Sequential(
             nn.Linear(256, 128),
             nn.LeakyReLU(0.1)
         )
-        torch.nn.init.xavier_uniform(self.fusion_fc1.weight, torch.nn.init.calculate_gain('leaky_relu', .1))
 
+        self.fusion_fc2 = nn.Sequential(
+            nn.Linear(128, 2),
+            nn.Softmax(dim=1)
+        )
         # self.fusion_fc2 = nn.Sequential(
-        #     nn.Linear(128, num_classes),
-        #     nn.Softmax()
+        #     nn.Linear(128, 1),
+        #     nn.Sigmoid()
         # )
         # torch.nn.init.xavier_uniform(self.fusion_fc2.weight, 1)
 
-        self.fusion_fc2 = nn.Sequential(
-            nn.Linear(128, num_classes),
-            nn.Sigmoid()
-        )
-        torch.nn.init.xavier_uniform(self.fusion_fc2.weight, 1)
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d) or isinstance(m, nn.Linear):
+                torch.nn.init.xavier_uniform_(m.weight, torch.nn.init.calculate_gain('leaky_relu', .1))
 
     def forward(self, voxel_map, data_vector):
         # print('voxel map size:', voxel_map.size())
@@ -88,7 +84,7 @@ class Conv3DPolicy(nn.Module):
 
         return x
 
-# model = Conv3DPolicy(4)
+# model = Conv3DPolicyBinary()
 # batch_size = 4
 # voxel_map = torch.randn(batch_size, 2, 32, 32, 32)
 # data_vector = torch.randn(batch_size, 8)

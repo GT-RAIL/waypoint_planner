@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 import rospkg
 import rospy
 
-from PolicyModel import Conv3DPolicy
+from PolicyModelBinary import Conv3DPolicyBinary
 from WaypointPolicyDataset import WaypointPolicyDataset
 from WaypointDecisionDataset import WaypointDecisionDataset
 
@@ -55,10 +55,10 @@ for item, label in training_set:
     idx += 1
 print('Sample weights calculated.')
 sample_weight_tensor = torch.DoubleTensor(sample_weight)
-sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight_tensor, len(sample_weight_tensor), replacement=False)
+sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight_tensor, len(sample_weight_tensor), replacement=True)
 
 # TODO: set a lower number of samples so that the weighted sampler without replacement samples balanced classes
-num_samples = min(class_count)  # Samples to use for each batch (cover all of the least-seen class each epoch)
+num_samples = 2*min(class_count)  # Samples to use for each batch (cover all of the least-seen class each epoch)
 
 # training_loader = DataLoader(training_set, batch_size=4, shuffle=True)
 training_loader = DataLoader(training_set, batch_size=4, shuffle=False, sampler=sampler)
@@ -76,7 +76,7 @@ training_loss = []
 validation_loss = []
 
 print('Creating model...')
-model = Conv3DPolicy(num_classes=num_classes)
+model = Conv3DPolicyBinary()
 loss_fn = torch.nn.CrossEntropyLoss()
 learning_rate = .00001
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -94,6 +94,10 @@ for epoch in range(max_epochs):
     total_loss = 0
     total_correct = 0
     total = 0
+    false_correct = 0
+    true_correct = 0
+    total_false = 0
+    total_true = 0
     for x, y in training_loader:
         x1 = x['voxel_map']
         x2 = x['data_vector']
@@ -118,11 +122,27 @@ for epoch in range(max_epochs):
 
         _, predicted = torch.max(y_pred.data, 1)
         total += y.size(0)
+        # total_correct += (torch.floor(torch.add(y_pred, 0.5)) == y).sum().item()
         total_correct += (predicted == y).sum().item()
+
+        false_indices = (y == 0)
+        true_indices = (y == 1)
+        false_predictions = (predicted == 0)
+        true_predictions = (predicted == 1)
+
+        false_correct += ((y + predicted) == 0).sum().item()
+        true_correct += ((y + predicted) == 2).sum().item()
+        total_false += (y == 0).sum().item()
+        total_true += (y == 1).sum().item()
+
+        if loss_count > num_samples:
+            break
 
     training_loss.append(total_loss/loss_count)
     print('Epoch:', epoch, '- training loss:', training_loss[len(training_loss) - 1])
     print('\tClassification rate:', total_correct/total, '(out of', total, 'samples)')
+    print('\t\tTrue rate:', true_correct/total_true, '(of', total_true, 'samples)')
+    print('\t\tFalse rate:', false_correct/total_false, '(of', total_false, 'samples)')
 
     # # Validation
     # # model.eval()

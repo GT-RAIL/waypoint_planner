@@ -50,6 +50,8 @@ private:
 
   std::vector<geometry_msgs::Point> waypoints;
 
+  int clampIndex(int i);
+
   int xIndex(double x);
 
   int yIndex(double y);

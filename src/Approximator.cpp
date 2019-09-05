@@ -207,6 +207,7 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
     vector<geometry_msgs::Pose> trajectory, waypoint_planner::Tensor3D &pos_image,
     waypoint_planner::Tensor3D &rot_image, bool vis)
 {
+//  ROS_INFO("2-1");
   vector<float> inputs = {static_cast<float>(cost_constraints[0]), static_cast<float>(cost_constraints[1]),
                           static_cast<float>(cost_constraints[2]),
                           static_cast<float>(robot_state.waypoint.x), static_cast<float>(robot_state.waypoint.y),
@@ -221,6 +222,7 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
   int prev_y = yIndex(trajectory[start_index].position.y);
   int prev_z = zIndex(trajectory[start_index].position.z);
 
+//  ROS_INFO("2-2");
   tf2::Quaternion q_tf(trajectory[start_index].orientation.x, trajectory[start_index].orientation.y,
                        trajectory[start_index].orientation.z, trajectory[start_index].orientation.w);
   tf2::Matrix3x3 mat_tf(q_tf);
@@ -230,19 +232,19 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
   int prev_pit = rotIndex(pitch_prev + M_PI);
   int prev_yaw = rotIndex(yaw_prev + M_PI);
 
-//  cout << std::to_string(window) << endl;
-//  cout << std::to_string(start_index) << endl;
 //  cout << std::to_string(prev_z) << ", " << std::to_string(prev_y) << ", " << std::to_string(prev_x) << endl;
   pos_image.data[prev_z].data[prev_y].data[prev_x] = static_cast<float>(window - start_index)/window;
 //  cout << std::to_string(prev_yaw) << ", " << std::to_string(prev_pit) << ", " << std::to_string(prev_rol) << endl;
   rot_image.data[prev_yaw].data[prev_pit].data[prev_rol] = static_cast<float>(window - start_index)/window;
 
+//  ROS_INFO("2-3");
   for (long i = start_index - 1; i >= 0; i --)
   {
     // update position image with current trajectory point
     int cur_x = xIndex(trajectory[i].position.x);
     int cur_y = yIndex(trajectory[i].position.y);
     int cur_z = zIndex(trajectory[i].position.z);
+
     if (prev_x == cur_x && prev_y == cur_y && prev_z == cur_z)
     {
       // simply overwrite the value to the earlier time intensity
@@ -251,10 +253,25 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
     else
     {
       // interpolate between prev and cur points
+//      cout << prev_x << ", " << prev_y << ", " << prev_z << endl;
+//      cout << cur_x << ", " << cur_y << ", " << cur_z << endl;
       vector< vector<int> > points = interpolatePoints(prev_x, cur_x, prev_y, cur_y, prev_z, cur_z);
 
       for (size_t j = 0; j < points.size(); j ++)
       {
+//        cout << i << ", " << j << ", " << window << endl;
+        if (points[j][2] < 0 || points[j][2] >= 32 || points[j][1] < 0 || points[j][1] >= 32 || points[j][0] < 0 || points[j][0] >= 32)
+        {
+          ROS_INFO("ERROR ERROR ERROR");
+          cout << points[j][2] << ", " << points[j][1] << ", " << points[j][0] << endl;
+          while (true)
+          {
+
+          }
+        }
+//        cout << points[j][2] << ", " << points[j][1] << ", " << points[j][0] << endl;
+//        cout << pos_image.data.size() << ", " << pos_image.data[0].data.size() << ", " << pos_image.data[0].data[0].data.size() << endl;
+//        cout << pos_image.data[points[j][2]].data[points[j][1]].data[points[j][0]] << endl;
         pos_image.data[points[j][2]].data[points[j][1]].data[points[j][0]] = (static_cast<float>(window - (i + 1))
             + static_cast<float>(j + 1)/points.size())/window;
       }
@@ -353,19 +370,32 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
   }
 }
 
+int Approximator::clampIndex(int i)
+{
+  if (i < 0)
+  {
+    return 0;
+  }
+  if (i > IMAGE_SIZE - 1)
+  {
+    return IMAGE_SIZE - 1;
+  }
+  return i;
+}
+
 int Approximator::xIndex(double x)
 {
-  return lround((x - min_x)/x_range*(IMAGE_SIZE - 1));
+  return clampIndex(lround((x - min_x)/x_range*(IMAGE_SIZE - 1)));
 }
 
 int Approximator::yIndex(double y)
 {
-  return lround((y - min_y)/y_range*(IMAGE_SIZE - 1));
+  return clampIndex(lround((y - min_y)/y_range*(IMAGE_SIZE - 1)));
 }
 
 int Approximator::zIndex(double z)
 {
-  return lround((z - min_z)/z_range*(IMAGE_SIZE - 1));
+  return clampIndex(lround((z - min_z)/z_range*(IMAGE_SIZE - 1)));
 }
 
 int Approximator::rotIndex(double rot)

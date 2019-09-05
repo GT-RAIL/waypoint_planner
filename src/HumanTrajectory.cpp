@@ -112,7 +112,7 @@ void HumanTrajectory::sampleRandomTrajectory(double end_time, double wait_chance
     }
 
     btQuaternion new_q;
-    new_q.setEuler(new_yaw, new_pit, new_yaw);
+    new_q.setEuler(new_yaw, new_pit, new_rol);
     new_pose.orientation.w = new_q.w();
     new_pose.orientation.x = new_q.x();
     new_pose.orientation.y = new_q.y();

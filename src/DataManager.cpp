@@ -16,8 +16,8 @@ DataManager::DataManager() :
   pnh.param<string>("dir", subfolder, "training");
   pnh.param<string>("waypoint_file", waypoint_filename, "iss_waypoints.csv");
   pnh.param<bool>("classifier_mode", classifier_mode, true);
-  std::cout << "Ready to read from data/" << subfolder << data_filename << ".csv" << std::endl;
   file_path = ros::package::getPath("waypoint_planner") + "/data/" + subfolder + "/" + data_filename + ".csv";
+  std::cout << "Ready to read from " << file_path << std::endl;
 
   save_1D_tensor = n.serviceClient<waypoint_planner::SaveTensor1D>("tensor_saver/save_1D_tensor");
   save_3D_tensor = n.serviceClient<waypoint_planner::SaveTensor3D>("tensor_saver/save_3D_tensor");
@@ -36,8 +36,9 @@ void DataManager::testReadData()
   if (datafile.is_open())
   {
     int csv_line = 0;  // TODO: loop through all csv entries
-    while (getline(datafile, line))
+    while (std::getline(datafile, line))
     {
+//      ROS_INFO("start");
       if (csv_line % 1 == 0)
       {
         cout << "At csv line " << std::to_string(csv_line) << "." << endl;
@@ -47,12 +48,30 @@ void DataManager::testReadData()
         csv_line ++;
         continue;
       }
+//      ROS_INFO("0");
       Action action(Action::OBSERVE);
       vector<double> cost_constraints;
       PerchState state;
       vector<geometry_msgs::Pose> trajectory;
+
       unpackLine(line, action, cost_constraints, state, trajectory);
 
+//      cout << std::to_string(action.actionType()) << endl;
+//      cout << action.actionGoal().x << endl;
+//      cout << action.actionGoal().y << endl;
+//      cout << action.actionGoal().z << endl << endl;
+//
+//      cout << cost_constraints[0] << ", " << cost_constraints[1] << ", " << cost_constraints[2] << ", " << cost_constraints[3] << endl << endl;
+//
+//      cout << state.waypoint.x << ", " << state.waypoint.y << ", " << state.waypoint.z << "  (" << std::to_string(state.perched) << ")" << endl << endl;
+//
+//      cout << trajectory.size() << endl;
+//      for (size_t i = 0; i < trajectory.size(); i ++)
+//      {
+//        cout << trajectory[i] << endl;
+//      }
+
+//      ROS_INFO("1");
       // set up service objects to save in a python-readable format
       waypoint_planner::SaveTensor1D data_srv;
       waypoint_planner::SaveTensor3D pos_srv;
@@ -85,8 +104,10 @@ void DataManager::testReadData()
         }
       }
 
+//      ROS_INFO("2");
       approximator.createInput(cost_constraints, state, trajectory, pos_srv.request.tensor, rot_srv.request.tensor);
 
+//      ROS_INFO("3");
 //      Tensor pos_image = torch::zeros(IntArrayRef{static_cast<long>(Approximator::IMAGE_SIZE),
 //                                                  static_cast<long>(Approximator::IMAGE_SIZE),
 //                                                  static_cast<long>(Approximator::IMAGE_SIZE)});
@@ -138,6 +159,7 @@ void DataManager::testReadData()
       data_srv.request.tensor.data[6] = static_cast<float>(state.perched);
       data_srv.request.tensor.data[7] = static_cast<float>(cost_constraints[3]);
 
+//      ROS_INFO("4");
       string output_csv_path =  ros::package::getPath("waypoint_planner") + "/data/" + subfolder + "/" + data_filename
         + "-samples.csv";
       string output_tensor_name = data_filename + "-" + std::to_string(csv_line);
@@ -152,12 +174,14 @@ void DataManager::testReadData()
       rot_srv.request.filename = rot_image_file;
       data_srv.request.filename = state_data_file;
 
+//      ROS_INFO("5");
       if (!save_1D_tensor.call(data_srv) || !save_3D_tensor.call(pos_srv) || !save_3D_tensor.call(rot_srv))
       {
         ROS_INFO("Failed to call python tensor saving service!");
         return;
       }
 
+//      ROS_INFO("6");
       // write to processed csv file
       std::ofstream sample_file;
       sample_file.open(output_csv_path, std::ios::out | std::ios::app);
@@ -173,11 +197,13 @@ void DataManager::testReadData()
       sample_file << output_tensor_name << endl;
       sample_file.close();
 
+//      ROS_INFO("7");
       // output tensor data for pos and rot images (in a python read-able format)
 //      save(pos_image, pos_image_file);
 //      save(rot_image, rot_image_file);
 //      save(state_data, state_data_file);
       csv_line ++;
+//      ROS_INFO("8");
     }
 
     datafile.close();
