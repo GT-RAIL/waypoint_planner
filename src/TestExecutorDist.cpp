@@ -10,11 +10,17 @@ const uint8_t TestExecutor::LP_SOLVE = 1;
 const uint8_t TestExecutor::LP_LOAD = 2;
 const uint8_t TestExecutor::MCTS_CONSTRAINED = 3;
 const uint8_t TestExecutor::MCTS_SCALARIZED = 4;
+const uint8_t TestExecutor::RANDOM = 5;
+const uint8_t TestExecutor::REACTIVE = 6;
+const uint8_t TestExecutor::APPROXIMATE_STOCHASTIC = 7;
+const uint8_t TestExecutor::APPROXIMATE_DETERMINISTIC = 8;
 
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
     bool optimal) :
     solver(horizon, step, mode, "iss_waypoints.csv", weights),
     lp_solver(horizon, step),
+    reactive_baseline("iss_waypoints.csv", weights),
+    random_baseline("iss_waypoints.csv"),
     current_action(Action::OBSERVE),
     pnh("~")
 {
@@ -256,6 +262,14 @@ int TestExecutor::run(double sim_step, bool vis, bool log_policy, string log_nam
     else if (approach == LP_SOLVE || approach == LP_LOAD)
     {
       current_action = lp_solver.getAction(state, current_time);
+    }
+    else if (approach == RANDOM)
+    {
+
+    }
+    else if (approach == REACTIVE)
+    {
+
     }
 
 //    ROS_INFO("1");
@@ -798,7 +812,7 @@ void logPolicyData(bool random_traj)
   vector<string> trajectory_seeds = {"experiment_times", "inspection_times", "pick_place_times"};
   vector<double> horizons = {180, 180, 180};
 
-  for (size_t run_counter = 0; run_counter < 1500; run_counter ++)
+  for (size_t run_counter = 0; run_counter < 1500000; run_counter ++)
   {
     for (size_t i = 0; i < trajectory_seeds.size(); i ++)
     {

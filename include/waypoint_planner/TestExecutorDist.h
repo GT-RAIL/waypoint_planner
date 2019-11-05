@@ -11,6 +11,8 @@
 //#include "waypoint_planner/MCTSSolver.h"
 #include "waypoint_planner/MCTSRewardSolver.h"
 #include "waypoint_planner/MCTSScalarizedSolver.h"
+#include "waypoint_planner/RandomBaseline.h"
+#include "waypoint_planner/ReactiveBaseline.h"
 #include "waypoint_planner/SMDPSolver.h"
 
 class TestExecutor
@@ -21,6 +23,10 @@ public:
     static const uint8_t LP_LOAD;
     static const uint8_t MCTS_CONSTRAINED;
     static const uint8_t MCTS_SCALARIZED;
+    static const uint8_t RANDOM;
+    static const uint8_t REACTIVE;
+    static const uint8_t APPROXIMATE_STOCHASTIC;
+    static const uint8_t APPROXIMATE_DETERMINISTIC;
 
     TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, std::vector<double> weights,
         bool optimal = false);
@@ -57,6 +63,8 @@ private:
 
   SMDPSolver solver;
   LPSolver lp_solver;
+  ReactiveBaseline reactive_baseline;
+  RandomBaseline random_baseline;
 
   bool optimal;
 

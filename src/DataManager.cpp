@@ -54,7 +54,11 @@ void DataManager::testReadData()
       PerchState state;
       vector<geometry_msgs::Pose> trajectory;
 
-      unpackLine(line, action, cost_constraints, state, trajectory);
+      if (!unpackLine(line, action, cost_constraints, state, trajectory))
+      {
+        csv_line ++;
+        continue;
+      }
 
 //      cout << std::to_string(action.actionType()) << endl;
 //      cout << action.actionGoal().x << endl;
@@ -283,7 +287,7 @@ void DataManager::testReadData()
 //  }
 //}
 
-void DataManager::unpackLine(string line, Action &action, vector<double> &cost_constraints, PerchState &state,
+bool DataManager::unpackLine(string line, Action &action, vector<double> &cost_constraints, PerchState &state,
     vector<geometry_msgs::Pose> &trajectory)
 {
   // Action (label)
@@ -320,6 +324,10 @@ void DataManager::unpackLine(string line, Action &action, vector<double> &cost_c
 
   // Time remaining (store at end of cost_constraints)
   cost_constraints.push_back(atof(line.substr(0, line.find(',')).c_str()));
+  if (cost_constraints[cost_constraints.size() - 1] <= 0)
+  {
+    return false;
+  }
   line = line.substr(line.find(',') + 1);
 
   while (line.find(',') != string::npos)
@@ -349,6 +357,7 @@ void DataManager::unpackLine(string line, Action &action, vector<double> &cost_c
 //  cout << "\tRobot State: " << state.perched << " - (" << state.waypoint.x << ", " << state.waypoint.y << ", "
 //      << state.waypoint.z << ")" << endl;
 //  cout << "\tRemaining trajectory size: " << trajectory.size() << endl;
+  return true;
 }
 
 

@@ -10,6 +10,10 @@ const uint8_t TestExecutor::LP_SOLVE = 1;
 const uint8_t TestExecutor::LP_LOAD = 2;
 const uint8_t TestExecutor::MCTS_CONSTRAINED = 3;
 const uint8_t TestExecutor::MCTS_SCALARIZED = 4;
+const uint8_t TestExecutor::RANDOM = 5;
+const uint8_t TestExecutor::REACTIVE = 6;
+const uint8_t TestExecutor::APPROXIMATE_STOCHASTIC = 7;
+const uint8_t TestExecutor::APPROXIMATE_DETERMINISTIC = 8;
 
 TestExecutor::TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode, vector<double> weights,
     size_t search_depth, string trajectory_file, size_t trajectory_samples, bool lp_resolve, double resolve_horizon) :

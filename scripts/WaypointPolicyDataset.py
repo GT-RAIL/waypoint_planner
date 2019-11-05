@@ -19,6 +19,7 @@ class WaypointPolicyDataset(Dataset):
 
     def __getitem__(self, idx):
         label = self.csv.iloc[idx, 0]
+        label -= 1  # we got rid of the "observe" samples
 
         file_base = self.csv.iloc[idx, 1]
         pos_img_tensor = torch.load(os.path.join(self.root_dir, file_base + '-pos.pt'))

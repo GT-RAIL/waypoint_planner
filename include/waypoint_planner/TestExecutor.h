@@ -21,6 +21,10 @@ public:
     static const uint8_t LP_LOAD;
     static const uint8_t MCTS_CONSTRAINED;
     static const uint8_t MCTS_SCALARIZED;
+    static const uint8_t RANDOM;
+    static const uint8_t REACTIVE;
+    static const uint8_t APPROXIMATE_STOCHASTIC;
+    static const uint8_t APPROXIMATE_DETERMINISTIC;
 
     TestExecutor(double horizon, double step, uint8_t approach, uint8_t mode,
         std::vector<double> weights, size_t search_depth, std::string trajectory_file,

@@ -60,8 +60,8 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
   int prev_pit = rotIndex(pitch_prev + M_PI);
   int prev_yaw = rotIndex(yaw_prev + M_PI);
 
-  pos_image[prev_z][prev_y][prev_x] = static_cast<float>(window - start_index)/window;
-  rot_image[prev_yaw][prev_pit][prev_rol] = static_cast<float>(window - start_index)/window;
+  pos_image[prev_z][prev_y][prev_x] = 0.75f*static_cast<float>(window - start_index)/window;  // scale by 0.75 to also include the robot's current position in the voxel map
+  rot_image[prev_yaw][prev_pit][prev_rol] = 0.75f*static_cast<float>(window - start_index)/window;  // scale by 0.75 to also include the robot's current position in the voxel map
 
   for (long i = start_index - 1; i >= 0; i --)
   {
@@ -72,7 +72,7 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
     if (prev_x == cur_x && prev_y == cur_y && prev_z == cur_z)
     {
       // simply overwrite the value to the earlier time intensity
-      pos_image[cur_z][cur_y][cur_x] = static_cast<float>(window - i)/window;
+      pos_image[cur_z][cur_y][cur_x] = 0.75f*static_cast<float>(window - i)/window;  // scale by 0.75 to also include the robot's current position in the voxel map
     }
     else
     {
@@ -81,8 +81,8 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
 
       for (size_t j = 0; j < points.size(); j ++)
       {
-        pos_image[points[j][2]][points[j][1]][points[j][0]] = (static_cast<float>(window - (i + 1))
-            + static_cast<float>(j + 1)/points.size())/window;
+        pos_image[points[j][2]][points[j][1]][points[j][0]] = 0.75f*(static_cast<float>(window - (i + 1))
+            + static_cast<float>(j + 1)/points.size())/window;  // scale by 0.75 to also include the robot's current position in the voxel map
       }
       prev_x = cur_x;
       prev_y = cur_y;
@@ -102,7 +102,7 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
         || fabs(pitch_cur - pitch_prev) > M_PI || fabs(yaw_cur - yaw_prev) > M_PI)
     {
       // simply overwrite the value to the earlier time intensity
-      rot_image[cur_yaw][cur_pit][cur_rol] = static_cast<float>(window - i)/window;
+      rot_image[cur_yaw][cur_pit][cur_rol] = 0.75f*static_cast<float>(window - i)/window;  // scale by 0.75 to also include the robot's current position in the voxel map
     }
     else
     {
@@ -111,8 +111,8 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
 
       for (size_t j = 0; j < points.size(); j ++)
       {
-        rot_image[points[j][2]][points[j][1]][points[j][0]] = (static_cast<float>(window - (i + 1))
-                                                               + static_cast<float>(j + 1)/points.size())/window;
+        rot_image[points[j][2]][points[j][1]][points[j][0]] = 0.75f*(static_cast<float>(window - (i + 1))
+                                                               + static_cast<float>(j + 1)/points.size())/window;  // scale by 0.75 to also include the robot's current position in the voxel map
       }
     }
     prev_rol = cur_rol;
@@ -233,9 +233,9 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
   int prev_yaw = rotIndex(yaw_prev + M_PI);
 
 //  cout << std::to_string(prev_z) << ", " << std::to_string(prev_y) << ", " << std::to_string(prev_x) << endl;
-  pos_image.data[prev_z].data[prev_y].data[prev_x] = static_cast<float>(window - start_index)/window;
+  pos_image.data[prev_z].data[prev_y].data[prev_x] = 0.75f*static_cast<float>(window - start_index)/window;  // scale by 0.75 to also include the robot's current position in the voxel map
 //  cout << std::to_string(prev_yaw) << ", " << std::to_string(prev_pit) << ", " << std::to_string(prev_rol) << endl;
-  rot_image.data[prev_yaw].data[prev_pit].data[prev_rol] = static_cast<float>(window - start_index)/window;
+  rot_image.data[prev_yaw].data[prev_pit].data[prev_rol] = 0.75f*static_cast<float>(window - start_index)/window;  // scale by 0.75 to also include the robot's current position in the voxel map
 
 //  ROS_INFO("2-3");
   for (long i = start_index - 1; i >= 0; i --)
@@ -248,7 +248,7 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
     if (prev_x == cur_x && prev_y == cur_y && prev_z == cur_z)
     {
       // simply overwrite the value to the earlier time intensity
-      pos_image.data[cur_z].data[cur_y].data[cur_x] = static_cast<float>(window - i)/window;
+      pos_image.data[cur_z].data[cur_y].data[cur_x] = 0.75f*static_cast<float>(window - i)/window;  // scale by 0.75 to also include the robot's current position in the voxel map
     }
     else
     {
@@ -260,7 +260,7 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
       for (size_t j = 0; j < points.size(); j ++)
       {
 //        cout << i << ", " << j << ", " << window << endl;
-        if (points[j][2] < 0 || points[j][2] >= 32 || points[j][1] < 0 || points[j][1] >= 32 || points[j][0] < 0 || points[j][0] >= 32)
+        if (points[j][2] < 0 || points[j][2] >= Approximator::IMAGE_SIZE || points[j][1] < 0 || points[j][1] >= Approximator::IMAGE_SIZE || points[j][0] < 0 || points[j][0] >= Approximator::IMAGE_SIZE)
         {
           ROS_INFO("ERROR ERROR ERROR");
           cout << points[j][2] << ", " << points[j][1] << ", " << points[j][0] << endl;
@@ -272,8 +272,8 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
 //        cout << points[j][2] << ", " << points[j][1] << ", " << points[j][0] << endl;
 //        cout << pos_image.data.size() << ", " << pos_image.data[0].data.size() << ", " << pos_image.data[0].data[0].data.size() << endl;
 //        cout << pos_image.data[points[j][2]].data[points[j][1]].data[points[j][0]] << endl;
-        pos_image.data[points[j][2]].data[points[j][1]].data[points[j][0]] = (static_cast<float>(window - (i + 1))
-            + static_cast<float>(j + 1)/points.size())/window;
+        pos_image.data[points[j][2]].data[points[j][1]].data[points[j][0]] = 0.75f*(static_cast<float>(window - (i + 1))
+            + static_cast<float>(j + 1)/points.size())/window;  // scale by 0.75 to also include the robot's current position in the voxel map
       }
       prev_x = cur_x;
       prev_y = cur_y;
@@ -293,7 +293,7 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
         || fabs(pitch_cur - pitch_prev) > M_PI || fabs(yaw_cur - yaw_prev) > M_PI)
     {
       // simply overwrite the value to the earlier time intensity
-      rot_image.data[cur_yaw].data[cur_pit].data[cur_rol] = static_cast<float>(window - i)/window;
+      rot_image.data[cur_yaw].data[cur_pit].data[cur_rol] = 0.75f*static_cast<float>(window - i)/window;  // scale by 0.75 to also include the robot's current position in the voxel map
     }
     else
     {
@@ -302,8 +302,8 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
 
       for (size_t j = 0; j < points.size(); j ++)
       {
-        rot_image.data[points[j][2]].data[points[j][1]].data[points[j][0]] = (static_cast<float>(window - (i + 1))
-            + static_cast<float>(j + 1)/points.size())/window;
+        rot_image.data[points[j][2]].data[points[j][1]].data[points[j][0]] = 0.75f*(static_cast<float>(window - (i + 1))
+            + static_cast<float>(j + 1)/points.size())/window;  // scale by 0.75 to also include the robot's current position in the voxel map
       }
     }
     prev_rol = cur_rol;
@@ -312,6 +312,26 @@ void Approximator::createInput(vector<double> cost_constraints, PerchState robot
     roll_prev = roll_cur;
     pitch_prev = pitch_cur;
     yaw_prev = yaw_cur;
+  }
+
+  // add robot pose to voxel grid
+  int rxi = xIndex(robot_state.waypoint.x);
+  int ryi = yIndex(robot_state.waypoint.y);
+  int rzi = zIndex(robot_state.waypoint.z);
+  for (int i = -1; i <= 1; i ++)
+  {
+    for (int j = -1; j <= 1; j ++)
+    {
+      for (int k = -1; k <= 1; k ++)
+      {
+        if (rxi + i >= Approximator::IMAGE_SIZE || rxi + i < 0 || ryi + j >= Approximator::IMAGE_SIZE || ryi + j < 0
+          || rzi + k >= Approximator::IMAGE_SIZE || rzi + k < 0)
+        {
+          continue;
+        }
+        pos_image.data[rxi+i].data[ryi+j].data[rzi+k] = 1.0;
+      }
+    }
   }
 
   if (vis)

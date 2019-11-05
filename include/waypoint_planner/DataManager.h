@@ -22,7 +22,7 @@ public:
 
     void testReadData();
 
-    void unpackLine(std::string line, Action &action, std::vector<double> &cost_constraints, PerchState &state,
+    bool unpackLine(std::string line, Action &action, std::vector<double> &cost_constraints, PerchState &state,
         std::vector<geometry_msgs::Pose> &trajectory);
 
 private:

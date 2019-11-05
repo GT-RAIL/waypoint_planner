@@ -1,0 +1,6 @@
+bool stochastic
+waypoint_planner/Tensor1D data_tensor
+waypoint_planner/Tensor3D pos_tensor
+waypoint_planner/Tensor3D rot_tensor
+---
+uint8 action

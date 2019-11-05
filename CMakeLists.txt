@@ -51,6 +51,7 @@ add_message_files(
 add_service_files(
   FILES
   ChangeTime.srv
+  GetAction.srv
   SaveTensor1D.srv
   SaveTensor3D.srv
 )
@@ -189,6 +190,8 @@ add_executable(test_executor_dist
   src/MCTSScalarizedSolver.cpp
   src/PerchState.cpp
   src/Approximator.cpp
+  src/ReactiveBaseline.cpp
+  src/RandomBaseline.cpp
 )
 add_dependencies(
   test_executor_dist
